@@ -3,6 +3,14 @@
 # Date: 2020_06_10
 
 
+# Data Notes:
+# Site By IM Extract
+# DATIM data as of: 06/08/2020 11:03:22 UTC
+# Genie report updated: 06/10/2020 10:52:19 UTC
+# Current period(s): 2019 Target,  2019 Q1,  2019 Q2,  2019 Q3,  2019 Q4,  2020 Target,  2020 Q1,  2020 Q2
+# Operating Unit: Global >Africa >Zambia >
+# Indicator: HTS_TST ,HTS_TST_POS ,PrEP_CURR ,PrEP_NEW ,TX_CURR ,TX_NET_NEW ,TX_NEW ,TX_PVLS
+
 # PRELIMS -----------------------------------------------------------------
 
 library(glitr)
@@ -27,7 +35,7 @@ library(patchwork)
 
   unzip(file.path(here(data, "Genie-SiteByIMs-Zambia-Daily-2020-06-11.zip")), exdir = data)
 
-  df <- vroom::vroom(here(data, "Genie_SITE_IM_Zambia_Daily_f9d40856-a7a2-4c48-821a-9f2de8e9cb45.txt")) %>% 
+  df <- vroom::vroom(here(data, "Genie_SITE_IM_Zambia_Daily_20ea2046-39b0-416c-96b7-1430ad0fcdeb.txt")) %>% 
     filter(disaggregate == "Total Numerator")
   
   df_long <- df %>%  reshape_msd() %>% 
@@ -37,6 +45,12 @@ library(patchwork)
   
   
   # Reproduce list of indicators for table, first by agency
+  df_long %>% 
+    filter(str_detect(period, "targets|cumulative")) %>% 
+    group_by(fundingagency, indicator, period) %>% 
+    summarise(value = sum(val, na.rm = TRUE)) %>% 
+    spread(period, value) %>% prinf()
+  
   df_long %>% 
     filter(fundingagency == "USAID", str_detect(period, "targets|cumulative")) %>% 
     group_by(indicator, period) %>% 
@@ -144,4 +158,21 @@ library(patchwork)
     si_save(file.path(here(images, "ZMB_TX_NET_NEW_Summary_2020_06_11")), plot = tx_nn_trends,
             scale = 1.25)    
   
-  
+    
+    tx_new <- 
+      tx_curr %>% 
+      filter(indicator == "TX_NEW") %>%
+      ggplot(aes(y = value, x = period, group = fundingagency)) +
+      geom_col(aes(fill = if_else(value > 0, "#8ba68a", "#a68a8b"))) + facet_wrap(~agency_order) +
+      geom_text_repel(aes(y = value, label = comma(value)), segment.colour = NA,
+                      family = "Source Sans Pro Light", vjust = 2, force = 10) +
+      si_style_ygrid() +
+      theme(legend.position = "none",
+            axis.title.y=element_blank(),
+            axis.text.y=element_blank(),
+            axis.ticks.y=element_blank()) +
+      scale_fill_identity() +
+      scale_y_continuous(labels = comma_format()) +
+      labs(x = NULL, y = NULL, 
+           title = "TX_NEW LEVELS BY AGENCY AND QUARTER\n")
+    

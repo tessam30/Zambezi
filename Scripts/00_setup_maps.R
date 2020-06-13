@@ -39,35 +39,34 @@ library(here)
 # FUNCTIONS ---------------------------------------------------------------
 
   # Function to return neighbors of a given contry
-  geo_neighbors <- function(country = "Zambia") {
+  geo_neighbors <- function(countries = list("Zambia")) {
     
     # Arrange the bounaries and rasters needed
     world <- rnaturalearth::ne_countries(scale = "large", returnclass = "sf") 
     
     #stopifnot({{country}} %in% world$sovereignt)
-    if(!{{country}} %in% world$sovereignt) {
-           stop('Country name is not the Natural Earth reference dataset. Please enter a name from dataset.')
-         }
+    # if(!{{countries}} %in% world$sovereignt) {
+    #   stop('Country name is not the Natural Earth reference dataset. Please enter a name from dataset.')
+    # }
     
     focus_country <-  rnaturalearth::ne_countries(scale = "large", returnclass = "sf") %>% 
-      dplyr::filter(sovereignt == {{country}})
+      dplyr::filter(sovereignt %in% {{countries}})
     
-    # Intersect selected country with those in the world to determine neighbors
+    # Filter based on neighbors touched by polygons of interest
     get_neighbors <- world %>% 
       sf::st_transform(., crs = st_crs(crs)) %>% 
-      dplyr::mutate(neighbors = sf::st_intersects(focus_country, world, sparse = FALSE) %>% t()) %>% 
-      dplyr::filter(neighbors == "TRUE") 
+      filter(lengths(st_touches(., focus_country)) > 0)
     
     return(get_neighbors)
   }
   
   
  # Return admin0 bondary for a given country
-  get_admin0 <- function(country = "Zambia") {
+  get_admin0 <- function(countries = list("Zambia"))  {
     
     admin0 <- 
       rnaturalearth::ne_countries(scale = "large", returnclass = "sf") %>% 
-      dplyr::filter(sovereignt == {{country}}) %>% 
+      dplyr::filter(sovereignt %in% {{countries}}) %>% 
       sf::st_transform(., crs = st_crs(crs))
     
     return(admin0)    
@@ -75,16 +74,16 @@ library(here)
   
   
 # Return admin1 boundary for a given country
-  get_admin1 <- function(country = "Zambia") {
+  get_admin1 <- function(countries = list("Zambia")) {
     admin1 <- 
-      rnaturalearth::ne_states(country = {{country}}, returnclass = "sf") %>% 
+      rnaturalearth::ne_states(country = {{countries}}, returnclass = "sf") %>% 
       sf::st_transform(., crs = st_crs(crs))
     
     return(admin1)  
   }
   
 # Return terrain for the country's bounding box, add some 
-  get_terrain <- function(country) {
+  get_terrain <- function(country = list("Zambia, Malawi")) {
     
     # Grab terrain for a selected area of interest (AOI)
     
@@ -134,10 +133,14 @@ library(here)
   
 # PLOTS -------------------------------------------------------------------
 
- terrain_map("Uganda")
+ terrain_map(list("Mali", "Burkina Faso", "Nigeria", "Togo", "Benin", "Ghana", "Niger"))
+ terrain_map(list("Mali", "Ethiopia")) 
+
  terrain_map("United Republic of Tanzania")
  terrain_map("Democratic Republic of the Congo")
  terrain_map("Malawi")
+ terrain_map("Zambia")
+ terrain_map("Angola")
 
 
    

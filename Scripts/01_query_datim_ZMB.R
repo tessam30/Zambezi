@@ -17,7 +17,7 @@ library(fs)
 
 # GLOBAL VARIABLES --------------------------------------------------------
 
-mypwd <- "tessam"
+myuser <- "tessam"
 
 
 # DATIM API FUNCTION ------------------------------------------------------

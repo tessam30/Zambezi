@@ -133,7 +133,9 @@ library(here)
   
 # PLOTS -------------------------------------------------------------------
 
- terrain_map(list("Mali", "Burkina Faso", "Nigeria", "Togo", "Benin", "Ghana", "Niger"))
+ zmb_base <- terrain_map(list("Zambia"))
+  
+  terrain_map(list("Mali", "Burkina Faso", "Nigeria", "Togo", "Benin", "Ghana", "Niger"))
  terrain_map(list("Mali", "Ethiopia")) 
 
  terrain_map("United Republic of Tanzania")

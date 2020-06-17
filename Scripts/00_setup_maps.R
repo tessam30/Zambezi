@@ -24,7 +24,7 @@ library(here)
 
 # GLOBALS -----------------------------------------------------------------
 
-  dem_url <- https://drive.google.com/drive/u/0/folders/1M02ToX9AnkozOHtooxU7s4tCnOZBTvm_
+  dem_url <- "https://drive.google.com/drive/u/0/folders/1M02ToX9AnkozOHtooxU7s4tCnOZBTvm_"
 
   data <- "Data"
   data_out <- "Dataout"
@@ -95,8 +95,8 @@ library(here)
     
     #tmp <- elevatr::get_elev_raster(zmb_admin0, z = 5) 
     
-    zmb_chop <- st_crop(get_admin0({{country}}), st_bbox(get_admin0({{country}})))
-    spdf <- crop(ne_geo, zmb_chop)  %>% 
+    chop <- get_admin0({{country}}) %>% st_crop(., st_bbox(.))
+    spdf <- crop(ne_geo, chop)  %>% 
       as(., "SpatialPixelsDataFrame") %>% as.data.frame(.)  
     
     return(spdf)
@@ -105,12 +105,12 @@ library(here)
   
   terrain_map <- function(country = "Zambia") {
     
-    zmb_admin0 <- get_admin0({{country}})
-    zmb_admin1 <- get_admin1({{country}})
-    zmb_ngbhrs <- geo_neighbors({{country}})
+    admin0 <- get_admin0({{country}})
+    admin1 <- get_admin1({{country}})
+    ngbhrs <- geo_neighbors({{country}})
     
     # Set the map range for centering the map in the ggplot call
-    mapRange <- c(range(st_coordinates(zmb_admin0)[, 1]), range(st_coordinates(zmb_admin0)[, 2]))
+    mapRange <- c(range(st_coordinates(admin0)[, 1]), range(st_coordinates(admin0)[, 2]))
     
     spdf <- get_terrain({{country}})
     
@@ -118,11 +118,11 @@ library(here)
       geom_tile(data = filter(spdf, SR_LR < 210), aes(x = x, y = y, alpha = SR_LR)) +
       scale_alpha(name = "", range = c(0.6, 0), guide = F) +
       theme(legend.position = "none") + 
-      geom_sf(data = zmb_ngbhrs, fill = "#d9d9d9", alpha = 0.35, size = 0.25, colour = grey70k) +
+      geom_sf(data = ngbhrs, fill = "#d9d9d9", alpha = 0.35, size = 0.25, colour = grey70k) +
       #geom_sf_text(data = zmb_neighbors, aes(label = sovereignt), family = "Source Sans Pro" ) +
-      geom_sf(data = zmb_admin0, colour = "white", fill = "grey93", size = 4, alpha = 0.25) +
-      geom_sf(data = zmb_admin0, colour = "black", fill = "NA") +
-      geom_sf(data = zmb_admin1, fill = "NA", linetype = "dotted") +
+      geom_sf(data = admin0, colour = "white", fill = "grey93", size = 4, alpha = 0.25) +
+      geom_sf(data = admin0, colour = "black", fill = "NA") +
+      geom_sf(data = admin1, fill = "NA", linetype = "dotted") +
       #geom_sf_label_repel(data = ne_cities, aes(label = name), alpha = 0.90, family = "Source Sans Pro Light") +
       si_style() +
       coord_sf(xlim = mapRange[c(1:2)], ylim = mapRange[c(3:4)]) +

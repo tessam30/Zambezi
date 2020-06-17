@@ -193,38 +193,6 @@ library(patchwork)
            title = "TX_NEW LEVELS BY AGENCY AND QUARTER\n")
     
 
-# MAP PREP ----------------------------------------------------------------
-
-df_prep <- 
-      df_long %>% 
-      filter(fundingagency == "USAID") %>% 
-      mutate(fy = substr(period, 3, 6)) %>% 
-      filter(str_detect(indicator, "PrEP"), str_detect(period, "cumulative")) %>% 
-      left_join(., df_orgs)
-    
-# Count how many orgunitUIDs per geography
-    df_prep %>% filter(!is.na(val), !is.na(latitude)) %>% count(snu1, indicator, fy) %>% 
-      group_by(indicator) %>% 
-      mutate(total = sum(n)) %>% 
-      spread(fy, n)
-    
-# Map PrEP_CURR
-  zmb_base +
-    geom_sf_text(data = get_admin1(list("Zambia")), aes(label = name), family = "Souce Sans Pro Light") +
-    geom_point(data = df_prep %>% filter(indicator == "PrEP_NEW", fy != "2021"), 
-               aes(y = latitude, x = longitude), shape = 21, fill = "#d7301f", stroke = 0.25) +
-    facet_wrap(~fy) +
-    labs(title = "PrEP_NEW facilities reporting in DATIM by fiscal year /n",
-         caption = "Source: DATIM Genie pull as of 6/11/2020") +
-    si_style_nolines() +
-    theme_void()
-  si_save(here(images, "PrEP_NEW_FY19_FY20.png"))
-    
-# Write the data to a .csv for checking
-  write_csv(here(data_out, "ZMB_PrEP_NEW_cumulative_fy19_fy20.csv"), x = df_prep)
-  write_csv(here(data_out, "ZMB_site_lat_lon.csv"), x = df_orgs)
-
-
 # MAPS from MSD -----------------------------------------------------------
 
 df_msd_prep 

@@ -120,7 +120,7 @@ library(here)
       theme(legend.position = "none") + 
       geom_sf(data = ngbhrs, fill = "#d9d9d9", alpha = 0.35, size = 0.25, colour = grey70k) +
       #geom_sf_text(data = zmb_neighbors, aes(label = sovereignt), family = "Source Sans Pro" ) +
-      geom_sf(data = admin0, colour = "white", fill = "grey93", size = 4, alpha = 0.25) +
+      geom_sf(data = admin0, colour = "white", fill = "grey93", size = 2, alpha = 0.25) +
       geom_sf(data = admin0, colour = "black", fill = "NA") +
       geom_sf(data = admin1, fill = "NA", linetype = "dotted") +
       #geom_sf_label_repel(data = ne_cities, aes(label = name), alpha = 0.90, family = "Source Sans Pro Light") +
@@ -135,14 +135,14 @@ library(here)
 
  zmb_base <- terrain_map(list("Zambia"))
   
-  terrain_map(list("Mali", "Burkina Faso", "Nigeria", "Togo", "Benin", "Ghana", "Niger"))
- terrain_map(list("Mali", "Ethiopia")) 
-
- terrain_map("United Republic of Tanzania")
- terrain_map("Democratic Republic of the Congo")
- terrain_map("Malawi")
- terrain_map("Zambia")
- terrain_map("Angola")
+ # terrain_map(list("Mali", "Burkina Faso", "Nigeria", "Togo", "Benin", "Ghana", "Niger"))
+ # terrain_map(list("Mali", "Ethiopia")) 
+ # 
+ # terrain_map("United Republic of Tanzania")
+ # terrain_map("Democratic Republic of the Congo")
+ # terrain_map("Malawi")
+ # terrain_map("Zambia")
+ # terrain_map("Angola")
 
 
    

@@ -42,10 +42,30 @@ vignettes/*.pdf
 *.csv
 *.xlsx
 *.png
+*.txt
+*.Rds
+*.dta
+*.xls
 
 #no GIS Data
 GIS/*
 Data/*
 Dataout/*
+Images/*
+Graphics/*
+
+#no data
+*.csv
+*.txt
+*.rds
+*.xlsx
+*.xls
+*.zip
+*.png
+*.twbx
+*.pptx
+
+#nothing from these folders
+GIS/*
 Images/*
 Graphics/*

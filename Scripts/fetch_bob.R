@@ -60,7 +60,7 @@
 # FETCH DATA -----------------------------------------------------------
   #Data stored on gdrive, retrieve
 
-  drive_auth(email = "tessam@usaid.gov")
+  drive_auth(email = "")
 
   # Setup bob id to use as an argument in drive functions; makes fetching eaiser
   bob_folder <- "17kLeOKEOZB-L5mxk53apC3srvDsyMW17"

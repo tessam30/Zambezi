@@ -28,7 +28,7 @@ library(patchwork)
   data <- "Data"
   data_out <- "Dataout"
   images <- "Images"
-  mer_in <- "C:/Users/Tessam/Documents/Data"
+  mer_in <- "../Documents/Data"
 
 
 # LOAD and MUNGE ----------------------------------------------------------

@@ -8,6 +8,8 @@
 
 library(Wavelength)
 library(glamr)
+library(tidyverse)
+
 
 
 # GLOBALS -----------------------------------------------------------------
@@ -15,7 +17,7 @@ library(glamr)
 username <- ""
 password <- glamr::mypwd(username)
 baseurl = "https://final.datim.org/"
-zmbuid <- get_outable("", mypwd("")) %>% 
+zmbuid <- get_outable(username, mypwd(username)) %>% 
   filter(operatingunit == "Zambia") %>% 
   pull(operatingunit_uid)
 

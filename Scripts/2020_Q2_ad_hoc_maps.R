@@ -15,15 +15,15 @@
 
 # LOAD GENIE --------------------------------------------------------------
 
-library(glamr)
-library(tidyverse)
-library(scales)
-library(tidytext)
-library(here)
-library(ICPIutilities)
-library(ggrepel)
-library(patchwork)
-library(readxl)
+  library(glamr)
+  library(tidyverse)
+  library(scales)
+  library(tidytext)
+  library(here)
+  library(ICPIutilities)
+  library(ggrepel)
+  library(patchwork)
+  library(readxl)
 
 # GLOBALS -----------------------------------------------------------------
 
@@ -46,7 +46,7 @@ library(readxl)
     mutate(fy = substr(period, 3, 6))
   
   # Previously, these came from the DATIM API pull. Pushed to drive until mypwd works again.
-  df_orgs <- read_csv(here(data, "ZMB_site_lat_lon.csv"))
+  df_orgs <- read_csv(here(data_out, "ZMB_site_lat_lon.csv"))
   
   # Unzip and assess shapefiles
   # unzip(here(gis, "zmb_adm_2020_shp.zip"), exdir = gis)
@@ -132,7 +132,7 @@ library(readxl)
     mutate(color = si_palettes$category20b[1:length(unique(ovc$Partner))]) %>% 
     rename(Partner = value)
   
-  setdiff(unique(admin2_simp$ADM2_EN), unique(ovc_tmp$ADM2_EN))
+  setdiff(unique(admin2_simp$ADM2_EN), unique(ovc$ADM2_EN))
   
  ovc_tmp <- left_join(ovc, ovc_partners)
  

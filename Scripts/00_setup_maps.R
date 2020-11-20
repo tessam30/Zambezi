@@ -5,21 +5,21 @@
 
 # PRELIMS -----------------------------------------------------------------
 
-library(rnaturalearthdata)
-library(tidyverse)
-library(raster)
-library(rgeos)
-library(sf)
-library(rnaturalearth)
-library(rnaturalearthhires)
-library(extrafont)
-library(ggspatial)
-library(ggtext)
-library(ggsflabel)
-library(glitr)
-library(glamr)
-library(googledrive)
-library(here)
+  library(rnaturalearthdata)
+  library(tidyverse)
+  library(raster)
+  library(rgeos)
+  library(sf)
+  library(rnaturalearth)
+  library(rnaturalearthhires)
+  library(extrafont)
+  library(ggspatial)
+  library(ggtext)
+  library(ggsflabel)
+  library(glitr)
+  library(glamr)
+  library(googledrive)
+  library(here)
 
 
 # GLOBALS -----------------------------------------------------------------

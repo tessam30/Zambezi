@@ -58,8 +58,6 @@ library(patchwork)
     mutate(fundingagency = if_else(fundingagency == "HHS/CDC", "CDC", fundingagency)) %>% 
     mutate(fy = substr(period, 3, 6))
   
-  
-  
   # Reproduce list of indicators for table, first by agency
   df_long %>% 
     filter(str_detect(period, "targets|cumulative")) %>% 

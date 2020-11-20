@@ -13,31 +13,31 @@
 
 # PRELIMS -----------------------------------------------------------------
 
-library(glitr)
-library(glamr)
-library(tidyverse)
-library(scales)
-library(tidytext)
-library(here)
-library(ICPIutilities)
-library(ggrepel)
-library(patchwork)
+  library(glitr)
+  library(glamr)
+  library(tidyverse)
+  library(scales)
+  library(tidytext)
+  library(here)
+  library(ICPIutilities)
+  library(ggrepel)
+  library(patchwork)
+  library(extrafont)
 
 # GLOBALS -----------------------------------------------------------------
 
   data <- "Data"
   data_out <- "Dataout"
   images <- "Images"
-  mer_in <- "../Documents/Data"
+  mer_in <- "../../DATIM_Data"
 
 
 # LOAD and MUNGE ----------------------------------------------------------
 
-  unzip(file.path(here(data, "Genie-SiteByIMs-Zambia-Daily-2020-06-11.zip")), exdir = data)
+  unzip(here(mer_in, "Genie-SiteByIMs-Zambia-Daily-2020-08-21.zip"), exdir = mer_in)
   
-  df <- vroom::vroom(here(data, "Genie_SITE_IM_Zambia_Daily_20ea2046-39b0-416c-96b7-1430ad0fcdeb.txt")) %>% 
+  df <- vroom::vroom(here(mer_in, "Genie_SITE_IM_Zambia_Daily_f90e06aa-b294-44b2-a8a1-f1cdeed2429d.txt")) %>% 
     filter(disaggregate == "Total Numerator")
-  
   
   # MSD data
   unzip(file.path(mer_in, "MER_Structured_Datasets_Site_IM_FY18-20_20200605_v1_1_Zambia.zip"), exdir = mer_in)
@@ -52,11 +52,11 @@ library(patchwork)
 
 # MUNGE GENIE -------------------------------------------------------------
 
-    
-  
-  df_long <- df %>%  reshape_msd() %>% 
+  df_long <- df %>%  
+    reshape_msd() %>% 
     mutate(fundingagency = if_else(fundingagency == "HHS/CDC", "CDC", fundingagency)) %>% 
     mutate(fy = substr(period, 3, 6))
+  
   
   # Reproduce list of indicators for table, first by agency
   df_long %>% 
@@ -79,12 +79,13 @@ library(patchwork)
     group_by(fundingagency, indicator, period) %>% 
     summarise(value = sum(val, na.rm = TRUE)) %>% 
     group_by(indicator) %>% 
-    mutate(change = value - lag(value)) %>% prinf()
+    mutate(change = value - lag(value)) %>% 
+    prinf()
   
   
   # pull targets
   tgts <- 
-    df_long %>% filter(fundingagency != "Dedpu", indicator %in% c("TX_CURR", "TX_NEW", "TX_NET_NEW"), str_detect(period, "target")) %>% 
+    df_long %>% filter(fundingagency != "Dedpu", indicator %in% c("TX_CURR", "TX_NEW", "TX_NET_NEW", "HTS_TST", "HTS_TST_POS", "HTS_SELF"), str_detect(period, "target")) %>% 
     group_by(fundingagency, indicator, fy) %>% 
     summarise(target = sum(val, na.rm = TRUE))
 
@@ -93,6 +94,17 @@ library(patchwork)
     group_by(period) %>% 
     summarise(value = sum(val, na.rm = TRUE)) %>% 
     mutate(growth = (value/lag(value)) -1)
+  
+  
+  # Percent acheivement
+  df_long %>% 
+    filter(fundingagency != "Dedup", indicator %in% c("TX_CURR", "TX_NEW", "TX_NET_NEW")) %>% 
+    filter(str_detect(period, "targ|cum", negate = FALSE), fy == "2020") %>% 
+    group_by(fundingagency, indicator, period, fy) %>% 
+    summarise(value = sum(val, na.rm = TRUE)) %>% 
+    spread(period, value) %>% 
+    mutate(ach = fy2020cumulative / fy2020_targets)
+    
   
   
 # What does overall treatment growth look like for the agencies?
@@ -105,10 +117,25 @@ library(patchwork)
     group_by(fundingagency) %>% 
     mutate(percent_change = (value/lag(value)) -1)%>% 
     ungroup() %>% 
-    mutate(quarter_fill = if_else(str_detect(period, "q2"), grey60k, grey20k),
+    mutate(quarter_fill = if_else(str_detect(period, "q3"), grey60k, grey20k),
            agency_order = fct_reorder(fundingagency, value, .desc = TRUE),
-           pt_start = if_else(period == "fy2019q2", value, NA_real_),
-           pt_end = if_else(period == "fy2020q2", value, NA_real_)) %>% 
+           pt_start = if_else(period == "fy2019q3", value, NA_real_),
+           pt_end = if_else(period == "fy2020q3", value, NA_real_)) %>% 
+    left_join(., tgts)
+  
+  hts <- 
+    df_long %>% 
+    filter(fundingagency != "Dedup", indicator %in% c("HTS_TST", "HTS_TST_POS", "HTS_SELF")) %>% 
+    filter(str_detect(period, "targ|cum", negate = TRUE)) %>% 
+    group_by(fundingagency, indicator, period, fy) %>% 
+    summarise(value = sum(val, na.rm = TRUE)) %>% 
+    group_by(fundingagency) %>% 
+    mutate(percent_change = (value/lag(value)) -1)%>% 
+    ungroup() %>% 
+    mutate(quarter_fill = if_else(str_detect(period, "q3"), grey60k, grey20k),
+           agency_order = fct_reorder(fundingagency, value, .desc = TRUE),
+           pt_start = if_else(period == "fy2019q3", value, NA_real_),
+           pt_end = if_else(period == "fy2020q3", value, NA_real_)) %>% 
     left_join(., tgts)
     
 
@@ -123,7 +150,7 @@ library(patchwork)
     scale_y_continuous(labels = percent_format()) +
     labs(x = NULL, y = NULL, 
          subtitle = "GROWTH IN TX_CURR BY AGENCY\n",
-         caption = "Source: DATIM Genie pull as of 6/11/2020") +
+         caption = "Source: DATIM Genie pull as of 8/21/2020") +
      theme(strip.text.x = element_blank())
     
     tx_level <- 
@@ -148,9 +175,13 @@ library(patchwork)
   
    # Combine graphs 
    tx_summary <-  tx_level / tx_change
-    si_save(here(images, "ZMB_TX_CURR_Summary_2020_06_11.png"), plot = tx_summary, 
-            scale = 1.4)
+    ggsave(here(images, paste0("ZMB_TX_CURR_Summary_", Sys.Date())), plot = tx_summary, 
+            scale = 1.4, device = "pdf", useDingbats = FALSE)
   
+    si_save(here(images, paste0("ZMB_TX_CURR_Summary_", Sys.Date(), ".png")), plot = tx_summary, 
+           scale = 1.4)
+    
+    
     
     tx_nn_trends <- 
       tx_curr %>% 
@@ -169,8 +200,11 @@ library(patchwork)
       labs(x = NULL, y = NULL, 
            title = "TX_NET_NEW LEVELS BY AGENCY AND QUARTER\n")
 
-    si_save(file.path(here(images, "ZMB_TX_NET_NEW_Summary_2020_06_11")), plot = tx_nn_trends,
-            scale = 1.25)    
+    ggsave(here(images, paste0("ZMB_TX_NET_NEW_Summary_", Sys.Date())), plot = tx_nn_trends,
+            scale = 1.25, device = "pdf", useDingbats = FALSE) 
+    
+    si_save(here(images, paste0("ZMB_TX_NET_NEW_Summary_", Sys.Date(), ".png")), plot = tx_nn_trends,
+            scale = 1.25)
   
     
     tx_new <- 
@@ -190,14 +224,46 @@ library(patchwork)
       labs(x = NULL, y = NULL, 
            title = "TX_NEW LEVELS BY AGENCY AND QUARTER\n")
     
+    
+
+# Testing -----------------------------------------------------------------
+
+  hts %>% 
+      filter(indicator == "HTS_TST") %>% 
+      ggplot(aes(y = percent_change, x = period)) +
+      geom_col(aes(fill = quarter_fill)) + facet_wrap(~agency_order) +
+      si_style_ygrid() +
+      scale_fill_identity() +
+      scale_y_continuous(labels = percent_format()) +
+      labs(x = NULL, y = NULL, 
+           subtitle = "GROWTH IN HTS_TST BY AGENCY\n",
+           caption = "Source: DATIM Genie pull as of 8/21/2020") +
+      theme(strip.text.x = element_blank())
+    
+    hts %>% 
+      filter(indicator == "HTS_TST_POS", fundingagency != "State/AF") %>%
+      group_by(fundingagency, indicator) %>% 
+      mutate(cumulative = cumsum(value)) %>% 
+      ungroup() %>% 
+      ggplot(aes(y = value, x = period, group = fundingagency)) +
+      geom_area(fill = grey20k, alpha = 0.80) +
+      geom_line() + facet_wrap(~agency_order) +
+      geom_point(aes(y = value, fill = value), shape = 21, size = 5, na.rm = TRUE, colour = grey90k, stroke = 1) +
+      geom_text_repel(aes(y = value, label = comma(value)), segment.colour = NA,
+                      family = "Source Sans Pro Light", vjust = 2, force = 10) +
+      si_style_ygrid() +
+      theme(legend.position = "none",
+            axis.title.y = element_blank(),
+            axis.text.y = element_blank(),
+            axis.ticks.y = element_blank()) +
+      scale_y_continuous(labels = comma_format()) +
+      scale_fill_viridis_c(option = "A", direction = -1, begin = .2) +
+      labs(x = NULL, y = NULL, 
+           title = "TESTING LEVELS BY AGENCY AND QUARTER\n")
 
 # MAPS from MSD -----------------------------------------------------------
 
-df_msd_prep 
-    
-    df_zmb %>% 
-    filter(fundingagency == "USAID",
-           str_detect(indicator, "PrEP")) %>% count(period)
+
       
     
     

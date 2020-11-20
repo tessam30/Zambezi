@@ -29,7 +29,7 @@
   data <- "Data"
   data_out <- "Dataout"
   images <- "Images"
-  gis <- "GIS"
+  gis <- "../../GEODATA"
 
   # 4326 CRS is the WGS default (Mercator)
   crs <- 4326
@@ -91,7 +91,7 @@
     #drive_download(dem_url)
     
     ne_geo <- 
-      raster(file.path(gis, "SR_LR", "SR_LR.tif")) 
+      raster(file.path(gis, "SR_LR.tif")) 
     
     #tmp <- elevatr::get_elev_raster(zmb_admin0, z = 5) 
     

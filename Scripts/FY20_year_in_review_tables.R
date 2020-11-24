@@ -323,3 +323,74 @@
       everything() ~ px(80)
     )
   
+  
+
+# IP Specific Tables ------------------------------------------------------
+
+  source("Data/2020_self_assessment_table_data.R")
+
+  
+  
+  ip_tbl <- ip_prf %>% 
+    gt(rowname_col = "IP",
+       groupname_col = "indicator") %>% 
+    fmt_missing(columns = everything(), missing_text = "-")
+  
+  
+  ip_tbl <- 
+    ip_tbl %>% 
+    tab_header(title = "USAID Implementing Mechanism Performance") %>% 
+    tab_options(table.font.names = "Source Sans Pro") %>% 
+    fmt_percent(columns = 2:8, decimals = 0) %>% 
+    tab_style(style = list(cell_text(weight = 'bold')), 
+              locations = cells_body(columns = 1:8, 
+                                     rows = `USAID Implementing Mechanism` == "USAID")) 
+  
+  ip_tbl %>% 
+    cols_width(
+      everything() ~ px(100)) %>% 
+    tab_footnote(
+      footnote = md("*No target set for MMD. Goal was to scale up as rapidly as possible*"),
+      locations = cells_column_labels(
+        columns = contains("MMD")
+      )
+    )
+  
+  
+
+# DREAMS Table -------------------------------------------------------------------------
+  
+  # Interventions to highlight in the table
+  grey_out <- c("Social Asset Building (Safe Spaces)", "Condom Distribution", 
+                "Financial Literacy Training", "Contraceptive Method Mix", 
+                "PrEP")  
+  
+  dreams_tbl <- 
+    dreams %>% 
+    gt(rowname_col = "IP",
+       groupname_col = "indicator") %>% 
+    fmt_missing(columns = everything(), missing_text = "-") %>% 
+    fmt_percent(columns = "Target Achieved", decimals = 0) %>%
+    fmt_number(columns = 3:6, decimals = 0) 
+  
+  
+ #Highlight specific rows
+  dreams_tbl <-
+    dreams_tbl %>% 
+    tab_style(
+      style = list(
+        cell_fill(color = "#f1f1f1")
+      ),
+      locations = cells_body(
+        columns = everything(), # not needed if coloring all columns
+        rows = Intervention %in% grey_out)
+    ) %>% 
+    tab_header("DREAMS: Increasing services for Adolescent Girls and Young Women") %>% 
+    tab_options(table.font.names = "Source Sans Pro") %>% 
+      fmt_missing(columns = everything(),
+                  missing_text = "-")
+  
+
+dreams_tbl %>% 
+    cols_width(
+      everything() ~ px(160)) 

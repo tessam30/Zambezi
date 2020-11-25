@@ -29,7 +29,7 @@
   data <- "Data"
   data_out <- "Dataout"
   images <- "Images"
-  gis <- "../../GEODATA"
+  gis <- "../../GEODATA/RASTER"
 
   # 4326 CRS is the WGS default (Mercator)
   crs <- 4326

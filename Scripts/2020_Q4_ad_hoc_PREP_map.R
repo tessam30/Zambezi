@@ -33,7 +33,7 @@
     reshape_msd() %>% 
     mutate(fundingagency = if_else(fundingagency == "HHS/CDC", "CDC", fundingagency)) %>% 
     mutate(fy = substr(period, 3, 6)) %>% 
-    filter(fundingagency == "USAID") %>% 
+    filter(fundingagency %in% c("USAID", "CDC")) %>% 
     filter(str_detect(indicator, "PrEP"), str_detect(period, "cumulative")) %>% 
     left_join(geo, by = c("orgunituid" = "id"))
 
@@ -49,9 +49,10 @@
     theme(axis.text.y = element_blank(),
           axis.text.x = element_blank())
   
-  
-
   si_save(here(images, "PrEP_NEW_FY20.png"))  
+
+  # Add facet argument in to get map below
+  si_save(here(images, "PrEP_NEW_FY20_by_agency.png"))  
 
   
   

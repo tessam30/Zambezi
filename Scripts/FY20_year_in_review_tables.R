@@ -18,9 +18,11 @@
   library(here)
   library(ICPIutilities)
   library(glue)
+  library(extrafontdb)
 
   datain <- "Data"
   dataout <- "Dataout"
+  graphics <- "Graphics"
   
   datim_path <- ("../../DATIM_DATA/")
   agencies <- c("CDC", "DOD", "USAID")
@@ -329,8 +331,6 @@
 
   source("Data/2020_self_assessment_table_data.R")
 
-  
-  
   ip_tbl <- ip_prf %>% 
     gt(rowname_col = "IP",
        groupname_col = "indicator") %>% 
@@ -394,3 +394,123 @@
 dreams_tbl %>% 
     cols_width(
       everything() ~ px(160)) 
+
+# PREP plot ---------------------------------------------------------------
+
+  # Queue up annotation text for a single facet
+  ann_text <- data.frame(x = 2.5, y = 16000, lab = "Significant scale-up\nquarter over quarter",
+                         indicator = factor(2, levels = c("PrEP_NEW", "PrEP_CURR")))
+
+  prep %>% 
+  mutate(color = if_else(indicator == "PrEP_NEW", "#287c6f", "#1e87a5"),
+    indicator = factor(indicator, c("PrEP_NEW", "PrEP_CURR"))) %>% 
+    ggplot(aes(x = period, y = val, fill = color)) +
+    geom_col() + 
+    scale_fill_identity() +
+    geom_text(aes(label = scales::comma(val)), 
+              vjust = 1.5, colour = "white", family = "Source Sans Pro") +
+    geom_errorbar(aes(x = period, ymin = targets, ymax = targets), colour = grey10k, size = 0.5, linetype = "dashed" ) +
+    facet_wrap(~indicator) +
+  glitr::si_style_xline() +
+  labs(x = NULL, y = NULL) +
+  scale_y_continuous(expand =c(0, 0)) +
+  theme(axis.text.y = element_blank(),
+        panel.grid = element_blank()) 
+
+  si_save(here(graphics, "FY20_PrEP_trends.png"))
+
+
+
+# Supply chain MMD --------------------------------------------------------
+
+  mmd <- mmd %>% 
+    mutate(color = case_when(
+      mmd_type == "Not reported" ~ "#8980cb",
+      mmd_type == "<3 Months (non-MMD)" ~ "#e07653",
+      mmd_type == "3-5 Month MMD" ~ "#1e87a5",
+      TRUE ~ "#287c6f"
+    ))
+  
+  
+  mmd %>% 
+    mutate(mmd_type = factor(mmd_type, c("6+ Month MMD", "3-5 Month MMD", "<3 Months (non-MMD)", "Not reported"))) %>% 
+    ggplot(aes(period, val, group = mmd_type, fill = color)) +
+    geom_col() + 
+      facet_wrap(~mmd_type, nrow = 1) +
+    scale_fill_identity() +
+    geom_text(aes(label = scales::percent(val, accuracy = 1)), 
+              vjust = 1.5, colour = "white", family = "Source Sans Pro") +
+    si_style_xline() +
+    scale_y_continuous(expand = c(0, 0)) +
+    theme(axis.text.y = element_blank(),
+          panel.grid = element_blank()) +
+    labs(x = NULL, y = NULL,
+         title = "TX_CURR by MMD Duration")
+
+  si_save(here(graphics, "FY20_MMD_duration_trends.png"), 
+          height = 3.75, width = 12, dpi = "retina")  
+  
+
+# VMMC --------------------------------------------------------------------
+
+  vmmc <- vmmc %>% 
+    mutate(color = case_when(
+      age_vmmc == "30+" ~ "#e07653",
+    age_vmmc == "15-29" ~ "#1e87a5",
+    TRUE ~ "#287c6f"
+    ),
+    age_vmmc = factor(age_vmmc, c("<15", "15-29", "30+")))
+  
+  vmmc %>% 
+    ggplot(aes(period, val, group = age_vmmc, fill = color)) +
+    geom_col() + 
+    facet_wrap(~age_vmmc, nrow = 1) +
+    scale_fill_identity() +
+    geom_text(aes(label = scales::percent(val, accuracy = 1)), 
+              vjust = 1.5, colour = "white", family = "Source Sans Pro") +
+    si_style_xline() +
+    scale_y_continuous(expand = c(0, 0)) +
+    theme(axis.text.y = element_blank(),
+          panel.grid = element_blank()) +
+    labs(x = NULL, y = NULL, 
+         title = "VMMC_CIRC AGE BAND TRENDS: ZAMBIA SHIFTED OUT OF UNDER 15 YEAR OLDS IN FY20Q4\n",
+         caption = "Quarterly OHA Tableau Dashboard as of 2020-11-25")
+    
+  si_save(here(graphics, "FY20_VMMC_CIRC_trends.png"), 
+          height = 7, width = 10.1, dpi = "retina") 
+  
+
+# SUPPLY CHAIN ------------------------------------------------------------
+
+  sc <- 
+    sc %>% 
+    mutate(regimen_order = fct_reorder(Regimen, share),
+           colors = case_when(
+             Regimen == "TLE 400" ~ "#287c6f",
+             Regimen == "TLD"     ~ "#1e87a5",
+             Regimen == "Other"   ~ "#e07653",
+             Regimen == "NVP"     ~ "#2057a7",
+             TRUE ~ "#c43d4d",
+           ),
+           label = ifelse(share > 0.04, share, NA)
+        )
+        
+  
+  color_order <- c("#287c6f", "#1e87a5", "#e07653", "#2057a7", "#c43d4d")
+  
+  ggplot(sc, aes(fill = regimen_order, y = Age, x = share)) + 
+    geom_bar(position="stack", stat="identity", color = "white") +
+    # geom_text(aes(label = paste0(scales::percent(label, accuracy = 1), Regimen)), 
+    #           colour = "white", family = "Source Sans Pro",
+    #           position = position_stack(vjust = 0.1)) +
+    scale_fill_manual(values = rev(color_order)) +
+    si_style_void() +
+    theme(legend.position = "none")
+  
+  si_save(here(graphics, "FY20_SC_ARVDISP_share.png"), 
+          height = 1, width = 12, dpi = "retina") 
+
+  
+
+
+  

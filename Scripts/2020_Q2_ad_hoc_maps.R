@@ -182,6 +182,7 @@
   
   ovc19_map <- ovc_map(cop_year = `COP19 Presence`,
     title = "COP19 OVC PARTNERS GEOGRAPHIC COVERAGE BY FUNDING AGENCY") 
+  
   si_save(here(images, "COP19_OVC_partnrs_map_by_agency_terrain.png"), plot = ovc19_map,
     scale = 1.25)
   
@@ -218,7 +219,7 @@
       title = "USAID OR CDC PRESENCE IN FY21",
       caption = "Created on 2020-06-17 by USAID SIEI | SI") +
     facet_wrap(~Agency) +
-    scale_fill_manual(values = c("CDC" = USAID_ltblue, "USAID" = USAID_blue)) +
+    scale_fill_manual(values = c("CDC" = usaid_lightblue, "USAID" = usaid_blue)) +
     si_style_nolines() +
     theme(legend.position = "none",
       axis.text.x = element_blank(),
@@ -245,7 +246,7 @@
     labs(x = NULL, y = NULL, 
       title = "USAID PRESENCE IN FY21",
       caption = "Created on 2020-06-17 by USAID SIEI | SI") +
-    scale_fill_manual(values = c("USAID" = USAID_blue)) +
+    scale_fill_manual(values = c("USAID" = usaid_blue)) +
     si_style_nolines() +
     theme(legend.position = "none",
       axis.text.x = element_blank(),

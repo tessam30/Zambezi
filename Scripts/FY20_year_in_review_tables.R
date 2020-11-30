@@ -19,6 +19,7 @@
   library(ICPIutilities)
   library(glue)
   library(extrafontdb)
+  library(scales)
 
   datain <- "Data"
   dataout <- "Dataout"
@@ -331,31 +332,55 @@
 
   source("Data/2020_self_assessment_table_data.R")
 
-  ip_tbl <- ip_prf %>% 
+  ip_prf <- ip_prf %>% 
+    rename_with( ~gsub(".", " ", .x, fixed = TRUE)) 
+  
+  tmp_prf <- tmp %>%  rename_with( ~gsub(".", " ", .x, fixed = TRUE)) 
+  
+ tx_tbl <- tmp_prf %>% 
+    select(1:7) %>% 
     gt(rowname_col = "IP",
        groupname_col = "indicator") %>% 
-    fmt_missing(columns = everything(), missing_text = "-")
-  
-  
-  ip_tbl <- 
-    ip_tbl %>% 
-    tab_header(title = "USAID Implementing Mechanism Performance") %>% 
-    tab_options(table.font.names = "Source Sans Pro") %>% 
-    fmt_percent(columns = 2:8, decimals = 0) %>% 
+    fmt_missing(columns = everything(), missing_text = " ") %>% 
+    tab_header(title = "TREATMENT: USAID Implementing Mechanism Performance") %>% 
+  tab_options(table.font.names = "Source Sans Pro")  %>% 
+   fmt_number(columns = 2:7, decimals = 0, rows = 5) %>% 
+    fmt_percent(columns = 2:7, decimals = 0, 
+                rows = 1:4) %>% 
     tab_style(style = list(cell_text(weight = 'bold')), 
-              locations = cells_body(columns = 1:8, 
-                                     rows = `USAID Implementing Mechanism` == "USAID")) 
-  
-  ip_tbl %>% 
+              locations = cells_body(columns = 1:7, 
+                                     rows = `USAID Implementing Mechanism` == "USAID")) %>% 
     cols_width(
-      everything() ~ px(100)) %>% 
+      everything() ~ px(120)) %>% 
     tab_footnote(
       footnote = md("*No target set for MMD. Goal was to scale up as rapidly as possible*"),
       locations = cells_column_labels(
         columns = contains("MMD")
       )
-    )
+      )
+tx_tbl
+  gtsave(tx_tbl, here(graphics, "FY20_self_assessment_summary_table_TREATMENT.pdf"))
+
   
+  tst_tbl <- 
+    tmp_prf %>% 
+    select(1, 8:10) %>% 
+    gt(rowname_col = "IP",
+       groupname_col = "indicator") %>% 
+    fmt_missing(columns = everything(), missing_text = " ") %>% 
+    tab_header(title = "PREVENTION: USAID Implementing Mechanism Performance") %>% 
+    tab_options(table.font.names = "Source Sans Pro")  %>% 
+    fmt_number(columns = 2:4, decimals = 0, rows = 5) %>% 
+    fmt_percent(columns = 2:4, decimals = 0, 
+                rows = 1:4) %>% 
+    tab_style(style = list(cell_text(weight = 'bold')), 
+              locations = cells_body(columns = everything(), 
+                                     rows = `USAID Implementing Mechanism` == "USAID")) %>% 
+    cols_width(
+      everything() ~ px(175))
+    
+
+gtsave(tst_tbl, here(graphics, "FY20_self_assessment_summary_table_PREVENTION.pdf"))
   
 
 # DREAMS Table -------------------------------------------------------------------------
@@ -364,6 +389,8 @@
   grey_out <- c("Social Asset Building (Safe Spaces)", "Condom Distribution", 
                 "Financial Literacy Training", "Contraceptive Method Mix", 
                 "PrEP")  
+  
+  dreams <- dreams %>% rename_with(~gsub(".", " ", .x, fixed = TRUE))
   
   dreams_tbl <- 
     dreams %>% 
@@ -375,25 +402,25 @@
   
   
  #Highlight specific rows
-  dreams_tbl <-
+
     dreams_tbl %>% 
-    tab_style(
-      style = list(
-        cell_fill(color = "#f1f1f1")
-      ),
-      locations = cells_body(
-        columns = everything(), # not needed if coloring all columns
-        rows = Intervention %in% grey_out)
-    ) %>% 
-    tab_header("DREAMS: Increasing services for Adolescent Girls and Young Women") %>% 
+    tab_style(style = list(cell_text(color = genoa, weight = "bold")),
+              locations = cells_body(
+                columns = vars(`Target Achieved`),
+                rows = `Target Achieved` > 1)) %>% 
+      tab_style(style = list(cell_text(color = scooter, weight = "bold")), 
+                locations = cells_body(columns = 5, 
+                                       rows = `Intervention` == "PrEP")) %>% 
+    # tab_header("DREAMS: Inter) %>% 
+    #   opt_align_table_header(align = c("left")) %>% 
     tab_options(table.font.names = "Source Sans Pro") %>% 
       fmt_missing(columns = everything(),
                   missing_text = "-")
   
 
-dreams_tbl %>% 
-    cols_width(
-      everything() ~ px(160)) 
+# dreams_tbl %>% 
+#     cols_width(
+#       everything() ~ px(160)) 
 
 # PREP plot ---------------------------------------------------------------
 
@@ -422,7 +449,8 @@ dreams_tbl %>%
 
 
 # Supply chain MMD --------------------------------------------------------
-
+library(lemon)
+  
   mmd <- mmd %>% 
     mutate(color = case_when(
       mmd_type == "Not reported" ~ "#8980cb",
@@ -436,8 +464,8 @@ dreams_tbl %>%
     mutate(mmd_type = factor(mmd_type, c("6+ Month MMD", "3-5 Month MMD", "<3 Months (non-MMD)", "Not reported"))) %>% 
     ggplot(aes(period, val, group = mmd_type, fill = color)) +
     geom_col() + 
-      facet_wrap(~mmd_type, nrow = 1) +
-    scale_fill_identity() +
+    facet_rep_wrap(~ mmd_type, repeat.tick.labels = 'bottom') +
+  scale_fill_identity() +
     geom_text(aes(label = scales::percent(val, accuracy = 1)), 
               vjust = 1.5, colour = "white", family = "Source Sans Pro") +
     si_style_xline() +
@@ -445,10 +473,11 @@ dreams_tbl %>%
     theme(axis.text.y = element_blank(),
           panel.grid = element_blank()) +
     labs(x = NULL, y = NULL,
-         title = "TX_CURR by MMD Duration")
+         title = "TX_CURR by MMD Duration, 15+ age band") 
+  
 
   si_save(here(graphics, "FY20_MMD_duration_trends.png"), 
-          height = 3.75, width = 12, dpi = "retina")  
+          height = 5.82, width = 7.5, dpi = "retina")  
   
 
 # VMMC --------------------------------------------------------------------
@@ -512,5 +541,169 @@ dreams_tbl %>%
 
   
 
+# PMTCT -------------------------------------------------------------------
 
+  every_nth = function(n) {
+    return(function(x) {x[c(TRUE, rep(FALSE, n - 1))]})
+  }
+  
+  pmtct_long <- 
+    pmtct %>% 
+    filter(indicator %in% c("Proxy EID 2mo Coverage", "HEI Linked to ART")) %>% 
+    mutate(indicator = fct_inorder(indicator)) %>% 
+    pivot_longer(cols = `FY18_Q1`:`FY20_Q4`, 
+                 names_to = c("pd"),
+                 values_to = "val") %>% 
+    mutate(time = factor(pd),
+           pd = str_replace(pd, "_", ""),
+           fill_color = if_else(indicator %in% c("Proxy EID 2mo Coverage", "HEI Linked to ART"), 
+                          "#D2E7ED", grey10k),
+           dot_color = if_else(fill_color == "#D2E7ED", scooter, grey60k)) %>% 
+    group_by(indicator) %>% 
+    ungroup()
+
+  pmtct_long %>% 
+    ggplot(aes(x = pd, y = val, group = indicator)) +
+    geom_area(aes(fill = fill_color), alpha = 0.65) +
+    geom_line(aes(color = dot_color)) +
+    geom_point(aes(fill = dot_color),
+               shape = 21, color = "white", size = 3) + 
+             facet_wrap(~indicator, nrow = 2) +
+    scale_y_continuous(limits = c(0, NA), 
+                       labels = scales::percent_format()) +
+    scale_fill_identity() +
+    scale_color_identity() +
+    si_style_ygrid() +
+    labs(x = NULL, y = NULL, 
+         caption = "FY20 Q4 PSNUxIM 2020-11-13, USAID ONLY")
+  
+  si_save(here(graphics, "FY20_peds_cascade.png"),
+          height = 6.39,
+          width = 13.29, 
+          dpi = "retina")
+                       
+                       
+                       
+                       
+                      
+
+# PrEP --------------------------------------------------------------------
+
+  prep19 <- readxl::read_excel(here("Data/DISCOVER-Health OHA PrEP Template FY19.xlsx"))  
+  prep20 <- readxl::read_excel(here("Data/DISCOVER-Health OHA PrEP Template FY20.xlsx")) 
+  
+  # PrEP_NEW is the indictor we are looking for to plot over time
+  
+  prep19_long <-
+    prep19 %>%
+    pivot_longer(cols = fy19_Oct:fy19_Sept,
+                 # names_pattern  = "(....)_(.*)",
+                 names_to = c("period"),
+                 values_to = "val") %>%
+    mutate(period = str_replace_all(period, "fy", "FY"),
+      period = fct_inorder(period))
+
+  prep19_long %>%
+    filter(indicator == "PrEP_NEW") %>%
+    group_by(period, Sex_KP) %>%
+    summarise(val = sum(val, na.rm = T)) %>%
+    spread(Sex_KP, val) %>%
+    prinf()
+  
+  
+  prep20_long <- 
+    prep20 %>% select(-c(fy19_Oct:fy19_Sept))%>% 
+    pivot_longer(cols = FY20_Oct:FY20_Sept,
+                 #names_pattern  = "(....)_(.*)",
+                 names_to = ("period"),
+                 values_to = "val"
+                ) %>% 
+    mutate(period = fct_inorder(period))
+
+  # Combine data frames
+  prep_all_long <-
+    bind_rows(prep19_long, prep20_long)
+
+  str(prep_all_long)
+  prep_all_long$period %>% levels()
+
+  prep_new <- 
+    prep_all_long %>% 
+    filter(indicator == "PrEP_NEW",
+           Sex_KP != "kvp") %>% 
+    group_by(period, Sex_KP) %>% 
+    summarise(val = sum(val, na.rm = T)) %>% 
+    spread(Sex_KP, val) %>% 
+    ungroup()  %>% 
+    mutate(total = female + male,
+           date_order = row_number(),
+           period = str_replace_all(period, "_", "-"),
+           n = 1,
+           events = if_else(date_order %in% c(6, 9, 11, 13, 15),
+                            total, 0),
+           period = fct_inorder(period)) %>%  
+    left_join(., date_sync, by = c("date_order"))
+  
+    
+  # Check order of factors
+  prep_new$period %>% levels()
+  
+  prep_new %>% 
+    filter(date_order != 24) %>% 
+    mutate(bar = if_else(events == scooter, total, 0)) %>% 
+    ggplot(aes(x = date)) + 
+    #geom_col(aes(y = events), fill = grey10k, alpha = 0.5, width = 10) +
+    geom_area(data = . %>% filter(date_order >= 18), aes(y = total), fill = grey10k, alpha = 0.25) +
+    geom_line(aes(y = total), color = grey70k, size = 1.15) +
+    #geom_line(aes(y = male), color = grey20k, linetype = "dashed") +
+    #geom_line(aes(y = female), color = grey20k) +
+    geom_point(aes(y = total), fill = grey70k, shape = 21, size = 5, color = "white") +
+      ggrepel::geom_label_repel(aes(y = total, label = scales::comma(total, accuracy = 1), color = grey70k),
+                            segment.size = 0,
+                            point.padding = 0.25,
+                            nudge_y = 10,
+                            family = "Source Sans Pro",
+                            label.size = NA) +
+    scale_fill_identity() +
+    scale_color_identity() +
+    #3200 or 1500 depending on filter above
+    scale_y_continuous(limits = c(0, 1500), expand = c(0, 0)) +
+    scale_x_date(date_breaks = "1 month", date_labels = "%b %y", 
+                 limits = as.Date(c("2018-09-15", "2020-09-15")), 
+                 expand = c(0,0)) +
+    si_style_xline() +
+    labs(x = NULL, y = NULL,
+         title = "FY2018 - 2020: DEMAND CREATION FOR PREP YIELDS RESULTS") +
+    theme(axis.text.y = element_blank())
+  
+  si_save(here(graphics, "FY20_PrEP_demand_creation_filtered.png"),
+          width = 13,
+          height = 6, 
+          dpi = "retina")
+
+  prep_new %>% 
+    filter(date_order != 24) %>% 
+    summarise(val = sum(total))
+  
+  
+
+# VLC & VLS ---------------------------------------------------------------
+
+vlc %>% 
+    mutate(color = if_else(indicator == "vlc", burnt_sienna, scooter)) %>% 
+    ggplot(aes(x = period, y = val, group = indicator))+
+    geom_line(aes(color = color)) +
+    geom_point(aes(fill = color), shape = 21, size = 4, color = "white")+
+    scale_y_continuous(limits = c(0, 1), labels = percent_format()) +
+    scale_color_identity() +
+    scale_fill_identity() +
+    si_style_ygrid() +
+    labs(x = NULL, y = NULL,
+         caption = "Source: FY20 Q4 PSNUxIM - Initial - 11.13.2020")
+
+  ggsave(here(graphics, "VLS_VLC_peds.pdf"),
+  width = 6.65, height =  5.59,
+  device = "pdf",
+  dpi = "retina",
+  useDingbats = FALSE)
   

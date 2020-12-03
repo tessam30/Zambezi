@@ -52,7 +52,7 @@
 
   df_zmb <- df %>% 
     filter(operatingunit == "Zambia",
-           indicator %in% c("TX_CURR", "HTS_TST", "HTS_TST_POS", "TX_NET_NEW", "TX_NEW", "VMMC_CIRC", "PrEP_NEW"),
+           indicator %in% c("TX_CURR", "HTS_TST", "HTS_TST_POS", "TX_NET_NEW", "TX_NEW", "VMMC_CIRC", "PrEP_NEW", "CXCA_SCRN", "TB_PREV"),
            fundingagency != "Dedup",
            standardizeddisaggregate == "Total Numerator"
     ) %>% 
@@ -93,7 +93,7 @@
            order = as.numeric(fy) + (as.numeric(q)/100),
            pd = fct_reorder(pd, order),
            fundingagency = factor(fundingagency, c("USAID", "CDC", "DOD")),
-           indicator = factor(indicator, c("HTS_TST", "HTS_TST_POS", "TX_NEW", "TX_CURR", "TX_NET_NEW", "VMMC_CIRC", "PrEP_NEW"))) %>% 
+           indicator = factor(indicator, c("HTS_TST", "HTS_TST_POS", "TX_NEW", "TX_CURR", "TX_NET_NEW", "VMMC_CIRC", "PrEP_NEW", "CXCA_SCRN", "TB_PREV"))) %>% 
     select(-c(period, period_type, fy, q, order))
   
   # Create the table
@@ -202,7 +202,6 @@
     filter(period != "FY21Q1")  
   
   
-  
   df_nn_ptnr <- df_ptnr %>% 
     filter(indicator == "TX_CURR" & 
              (str_detect(period, "4") | period_type == "targets")) %>% 
@@ -228,7 +227,7 @@
            order = as.numeric(fy) + (as.numeric(q)/100),
            pd = fct_reorder(pd, order),
            # fundingagency = factor(fundingagency, c("USAID", "CDC", "DOD")),
-           indicator = factor(indicator, c("HTS_TST", "HTS_TST_POS", "TX_NEW", "TX_CURR", "TX_NET_NEW", "VMMC_CIRC"))) %>% 
+           indicator = factor(indicator, c("HTS_TST", "HTS_TST_POS", "TX_NEW", "TX_CURR", "TX_NET_NEW", "VMMC_CIRC", "PrEP_NEW", "CXCA_SCRN", "TB_PREV"))) %>% 
     select(-c(period, period_type, fy, q, order))
   
            
@@ -330,14 +329,13 @@
 
 # IP Specific Tables ------------------------------------------------------
 
+  # Data provided by the mission in tables
+  # 
   source("Data/2020_self_assessment_table_data.R")
-
-  ip_prf <- ip_prf %>% 
-    rename_with( ~gsub(".", " ", .x, fixed = TRUE)) 
   
-  tmp_prf <- tmp %>%  rename_with( ~gsub(".", " ", .x, fixed = TRUE)) 
+  ip_prf <- tmp %>%  rename_with( ~gsub(".", " ", .x, fixed = TRUE)) 
   
- tx_tbl <- tmp_prf %>% 
+ tx_tbl <- ip_prf %>% 
     select(1:7) %>% 
     gt(rowname_col = "IP",
        groupname_col = "indicator") %>% 
@@ -363,7 +361,7 @@ tx_tbl
 
   
   tst_tbl <- 
-    tmp_prf %>% 
+    ip_prf %>% 
     select(1, 8:10) %>% 
     gt(rowname_col = "IP",
        groupname_col = "indicator") %>% 
@@ -391,6 +389,8 @@ gtsave(tst_tbl, here(graphics, "FY20_self_assessment_summary_table_PREVENTION.pd
                 "PrEP")  
   
   dreams <- dreams %>% rename_with(~gsub(".", " ", .x, fixed = TRUE))
+  
+  dreams %>% mutate(test = `2020 Results` /`2020 Targets`)
   
   dreams_tbl <- 
     dreams %>% 
@@ -623,6 +623,13 @@ library(lemon)
   # Combine data frames
   prep_all_long <-
     bind_rows(prep19_long, prep20_long)
+  
+  # Create a dataframe with dates so plot is easy to make w/ a date x-var
+  start_date <- as.Date("2018/10/1")
+  end_date <- as.Date("2020/09/01")
+  dates_fy <- data.frame(date = seq(start_date, end_date, "months")) %>% 
+    mutate(date_order = row_number(),
+           fy = if_else(date < "2019/10/1", "fy19", "fy20"))
 
   str(prep_all_long)
   prep_all_long$period %>% levels()
@@ -642,23 +649,23 @@ library(lemon)
            events = if_else(date_order %in% c(6, 9, 11, 13, 15),
                             total, 0),
            period = fct_inorder(period)) %>%  
-    left_join(., date_sync, by = c("date_order"))
+    left_join(., dates_fy, by = c("date_order"))
   
     
   # Check order of factors
   prep_new$period %>% levels()
   
   prep_new %>% 
-    filter(date_order != 24) %>% 
+    #filter(date_order != 24) %>% 
     mutate(bar = if_else(events == scooter, total, 0)) %>% 
     ggplot(aes(x = date)) + 
     #geom_col(aes(y = events), fill = grey10k, alpha = 0.5, width = 10) +
     geom_area(data = . %>% filter(date_order >= 18), aes(y = total), fill = grey10k, alpha = 0.25) +
-    geom_line(aes(y = total), color = grey70k, size = 1.15) +
-    #geom_line(aes(y = male), color = grey20k, linetype = "dashed") +
-    #geom_line(aes(y = female), color = grey20k) +
-    geom_point(aes(y = total), fill = grey70k, shape = 21, size = 5, color = "white") +
-      ggrepel::geom_label_repel(aes(y = total, label = scales::comma(total, accuracy = 1), color = grey70k),
+    geom_line(aes(y = total), color = scooter, alpha = 0.75, size = 1) +
+    geom_line(aes(y = male), color = "#ffd4ac", size = 0.5) +
+    geom_line(aes(y = female), color = "#e9ddff", size = 0.5) +
+    geom_point(aes(y = total), fill = scooter, shape = 21, size = 4, color = "white") +
+      ggrepel::geom_label_repel(aes(y = total, label = scales::comma(total, accuracy = 1), color = scooter),
                             segment.size = 0,
                             point.padding = 0.25,
                             nudge_y = 10,
@@ -667,7 +674,7 @@ library(lemon)
     scale_fill_identity() +
     scale_color_identity() +
     #3200 or 1500 depending on filter above
-    scale_y_continuous(limits = c(0, 1500), expand = c(0, 0)) +
+    scale_y_continuous(limits = c(0, 3200), expand = c(0, 0)) +
     scale_x_date(date_breaks = "1 month", date_labels = "%b %y", 
                  limits = as.Date(c("2018-09-15", "2020-09-15")), 
                  expand = c(0,0)) +
@@ -676,10 +683,40 @@ library(lemon)
          title = "FY2018 - 2020: DEMAND CREATION FOR PREP YIELDS RESULTS") +
     theme(axis.text.y = element_blank())
   
-  si_save(here(graphics, "FY20_PrEP_demand_creation_filtered.png"),
+  si_save(here(graphics, "FY20_PrEP_demand_creation.png"),
           width = 13,
           height = 6, 
           dpi = "retina")
+  
+  
+  # Area graph version
+  prep_new %>% 
+    pivot_longer(cols = c("male", "female"),
+                 names_to = "sex",
+                 values_to = "prep_new") %>% 
+    ggplot(aes(x = date)) + 
+    geom_area(aes(y = prep_new, fill = factor(sex)), alpha = 0.25) +
+    geom_line(aes(y = total), color = scooter, alpha = 0.75, size = 1) +
+    geom_point(aes(y = total), fill = scooter, shape = 21, size = 4, color = "white") +
+    ggrepel::geom_label_repel(data = . %>% filter(sex == "male"),
+                              aes(y = total, label = scales::comma(total, accuracy = 1), color = scooter),
+                              segment.size = 0,
+                              point.padding = 0.25,
+                              nudge_y = 10,
+                              family = "Source Sans Pro",
+                              label.size = NA) +
+    scale_color_identity() +
+    scale_fill_manual(values = c("male" = "#ffd4ac", "female" = "#e9ddff")) +
+    #3200 or 1500 depending on filter above
+    scale_y_continuous(limits = c(0, 3200), expand = c(0, 0)) +
+    scale_x_date(date_breaks = "1 month", date_labels = "%b %y", 
+                 limits = as.Date(c("2018-09-15", "2020-09-15")), 
+                 expand = c(0,0)) +
+    si_style_xline() +
+    labs(x = NULL, y = NULL,
+         title = "FY2018 - 2020: DEMAND CREATION FOR PREP YIELDS RESULTS") +
+    theme(axis.text.y = element_blank(), legend.position = "none")
+
 
   prep_new %>% 
     filter(date_order != 24) %>% 
@@ -701,9 +738,9 @@ vlc %>%
     labs(x = NULL, y = NULL,
          caption = "Source: FY20 Q4 PSNUxIM - Initial - 11.13.2020")
 
-  ggsave(here(graphics, "VLS_VLC_peds.pdf"),
+  ggsave(here(graphics, "VLS_VLC_peds_scaled.pdf"),
   width = 6.65, height =  5.59,
   device = "pdf",
   dpi = "retina",
-  useDingbats = FALSE)
+  useDingbats = FALSE, scale = 0.75)
   

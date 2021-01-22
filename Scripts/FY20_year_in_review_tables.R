@@ -181,7 +181,7 @@
   
   #Filter table to just FY20 results
   
-  
+  #Is there any correlation between where those missing children are and where we have coverage? New provinces added in COP20. Mapped out districts and sites to really look at that.
   
   
 # Partner Performance -----------------------------------------------------
@@ -330,10 +330,10 @@
 # IP Specific Tables ------------------------------------------------------
 
   # Data provided by the mission in tables
-  # 
+  # NOTES - the TB_PREV data seem suspect
   source("Data/2020_self_assessment_table_data.R")
   
-  ip_prf <- tmp %>%  rename_with( ~gsub(".", " ", .x, fixed = TRUE)) 
+  ip_prf <- ip_prf %>%  rename_with( ~gsub(".", " ", .x, fixed = TRUE)) 
   
  tx_tbl <- ip_prf %>% 
     select(1:7) %>% 
@@ -390,6 +390,7 @@ gtsave(tst_tbl, here(graphics, "FY20_self_assessment_summary_table_PREVENTION.pd
   
   dreams <- dreams %>% rename_with(~gsub(".", " ", .x, fixed = TRUE))
   
+  # Verify folks can math
   dreams %>% mutate(test = `2020 Results` /`2020 Targets`)
   
   dreams_tbl <- 
@@ -449,7 +450,7 @@ gtsave(tst_tbl, here(graphics, "FY20_self_assessment_summary_table_PREVENTION.pd
 
 
 # Supply chain MMD --------------------------------------------------------
-library(lemon)
+  library(lemon)
   
   mmd <- mmd %>% 
     mutate(color = case_when(

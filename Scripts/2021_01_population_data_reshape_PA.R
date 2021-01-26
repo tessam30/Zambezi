@@ -5,8 +5,7 @@
 
 
 # GLOBALS -----------------------------------------------------------------
-  
-  library(tidyverse)
+
   library(glitr)
   library(glamr)
   library(gisr)
@@ -16,6 +15,8 @@
   library(extrafont)
   library(scales)
   library(openxlsx)
+  library(tidyverse)
+  library(ggtext)
   
   #Data folder
   cop_data <- "Data/COP21"
@@ -48,7 +49,8 @@
     pop_year <- 
       year_list %>% 
       set_names() %>% 
-      map(.f = ~read_excel(path = here(cop_data, pop_file), sheet = .x, col_names = TRUE, skip = 2) %>% 
+      map(.f = ~read_excel(path = here(cop_data, pop_file), 
+                           sheet = .x, col_names = TRUE, skip = 2) %>% 
             mutate(year = .x, 
                    prov_flag = if_else(`Row Labels` %in% prov_list, 1, 0))) %>% 
       bind_rows()
@@ -132,7 +134,6 @@
       mutate(flag = near(district_totals, pop_by_district_year)) %>% 
       count(flag)
     
-    
 
 # EXPLORE TRENDS  ---------------------------------------------------------
 
@@ -147,16 +148,25 @@
       geom_vline(xintercept = seq(from = -0.075, to =0.075, by = 0.025), colour = "white", 
                  alpha = 0.75) +
       geom_vline(xintercept = 0, colour = grey50k) +  
-      #ggrepel::geom_text_repel(aes(label = scales::percent(round(sex_age_band_sh, 4), 0.01)), size = 2) +
+      ggrepel::geom_text_repel(aes(label = scales::percent(round(sex_age_band_sh, 4), 0.01)), size = 2) +
       facet_wrap(~province, nrow = 2) +
       si_style_xline() +
-      scale_fill_identity() 
+      scale_fill_identity() +
+      scale_x_continuous(labels = c("10%", "5%", "0", "5%", "10%")) +
+      labs(x = NULL, y = NULL, 
+      title = "<span style = 'font-size:14pt; font-family:SourceSansPro-SemiBold;'>POPULATION PYRAMID BY PROVINCE</span><br>
+      <span style = 'color:#dfd3ff;'>      FEMALES</span> 
+      | <span style = 'color:#ffcaa2;'>MALES</span>") +
+      theme(
+        text = element_text(family = "Source Sans Pro"),
+        plot.title.position = "plot",
+        plot.title = element_markdown(size = 11, lineheight = 1.2))
+           
+    si_save(here(images, "ZMB_prov_pop_pyramid.png"), scale = 1.75)
     
-
 # DOCUMENT and EXPORT -----------------------------------------------------
 
   varnames <- c(names(pop_year_region), names(pop_year_district)) %>% unique()
-    
     
   var_desc <- 
       varnames %>% 
@@ -175,33 +185,34 @@
         variable == "pop_by_prov_year" ~ 'estimated population by province by year',
         variable == "pop_by_district_year" ~ 'estimated population by district by year'
       ))
-    
-        
+  
+    # NOTES: Had issues with openxlsx writing readable excel file, so csvs and manually combined  
     #create workbook
     wb <- createWorkbook()
-    
-    #update font
-    modifyBaseFont(wb, fontName = "Calibri Light")
     
     #add instructions tab
     add_data_excelwb <- function(df, sheet_name) {
       
       addWorksheet(wb, sheetName = {{sheet_name}}, gridLines = FALSE)
-      writeDataTable(wb, sheet = {{sheet_name}}, x = df,
-                     tableStyle = "TableStyleLight2", withFilter = TRUE, )
-
+      writeDataTable(wb, sheet = {{sheet_name}}, x = df, withFilter = TRUE)
+      setColWidths(wb, sheet = {{sheet_name}}, widths = 18, cols = 1:length(names(df)))
+                   
     }
     
     df_list <- list(pop_year_district, pop_year_region, zmb_pop_nso, var_desc)
-    df_list_names <- list("Population by district/sex/age", "Population by province/sex/age",
+    df_list_names <- list("Population by district_sex_age", "Population by province_sex_age",
                           "Zambia Population Estimates NSO", "variable codebook")
     
-    #purrr::map2(.x = df_list, .y = df_list_names, .f = ~add_data_excelwb(df = .x, sheet_name = .y))
+    # Write them all as CSVs
+    purrr::map2(.x = df_list, 
+                .y = df_list_names,
+                .f = ~write.csv(.x, here(dataout, paste0(.y, ".csv"))))
+
     
-    add_data_excelwb(df = pop_year_district, sheet_name = "Population by district/sex/age")
-    add_data_excelwb(df = pop_year_region, sheet_name = "Population by province/sex/age")
-    add_data_excelwb(df = zmb_pop_nso, sheet_name = "zmb_pop_nso")
-    add_data_excelwb(df = var_desc, sheet_name = "variable codebook")
+    # add_data_excelwb(df = pop_year_district, sheet_name = "Population by district/sex/age")
+    # add_data_excelwb(df = pop_year_region, sheet_name = "Population by province/sex/age")
+    # add_data_excelwb(df = zmb_pop_nso, sheet_name = "zmb_pop_nso")
+    # add_data_excelwb(df = var_desc, sheet_name = "variable codebook")
     
     
     #save

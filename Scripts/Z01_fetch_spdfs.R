@@ -76,8 +76,22 @@
   terr_map <- gisr::terrain_map(country, adm1 = spdf_reg_zmb,
                           adm0 = spdf_ou_zmb,
                           terr_path = rasdata)
+  
+  # Add in snu1 and psnu names to spdf_Comm_zmb for fuzzy joins
+  # Latest MSD PSNU x IM File - Curr release
+  file_msd <- return_latest(folderpath = datim, 
+                            pattern = "MER_S.*_PSNU_IM_FY18-21_\\d{8}_v.*Zambia.*.zip")
+  
+  msd_geo <- 
+    ICPIutilities::read_msd(file_msd) %>% 
+    distinct(psnuuid, psnu, operatingunit, operatingunituid, snu1)
+  
+  spdf_comm_zmb <-  
+    left_join(spdf_comm_zmb, msd_geo, by = c("uid" = "psnuuid")) %>% 
+    glamr::clean_psnu() %>% 
+    dplyr::mutate(snu1 = str_remove_all(snu1, " Province"))
     
-  # Clean up workspace
+  # Clean up workspace.
   remove(df_locs, df_lvls, df_ous, spdf_pepfar)  
 
 

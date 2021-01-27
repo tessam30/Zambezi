@@ -18,6 +18,8 @@
   library(here)
   library(patchwork)
 
+  library(gt)
+
   #Data folder
   cop_data <- "Data/COP21"
   images <- "Images"
@@ -103,7 +105,8 @@
       art_main_long %>% 
       group_by(district, calendar_quarter, sex, age, age_group) %>% 
       summarise(art_est = sum(art_est, na.rm = TRUE)) %>% 
-      ungroup()
+      ungroup() %>% 
+      mutate(district = if_else(district == "Mushindano", "Mushindamo", district))
   
   
   # Load and harmonize UNAIDS data so it will easily merge with art_main file output
@@ -209,8 +212,96 @@
 
 # EDA and MAPPING ---------------------------------------------------------
 
+  source("./Scripts/Z01_fetch_spdfs.R")
   
+  districts <- art_main_long %>% distinct(district) %>% pull()
+  districts_geo <- spdf_comm_zmb %>% distinct(psnu) %>% pull()
+  setdiff(districts, unique(spdf_comm_zmb$psnu))
   
+  art_geo <- 
+    left_join(spdf_comm_zmb, art_dist, by = c("psnu" = "district"))
+
+   terr_map +
+    geom_sf(data = art_geo %>% 
+              filter(sex != "both", str_detect(calendar_quarter, "CY2020")),
+            aes(fill = art_est), color = "white") +
+    facet_wrap(sex~calendar_quarter) +
+    scale_fill_si(palette = "denims", discrete = FALSE, trans = "log", labels = comma) +
+    si_style_map()
+  
+   art_dist %>% 
+     filter(sex != "both", str_detect(calendar_quarter, "CY2020")) %>% 
+     group_by(district, calendar_quarter, sex) %>% 
+     summarise(tot = sum(art_est)) %>% 
+     spread(calendar_quarter, tot)
+   
+   
+
+# TABLES AND SPARKLINES ---------------------------------------------------
+
+   # TODO - Generate Tables for each Province and stitch together into PDF booklet
+   
+   #ggplot for the sparkline
+   # Add in Regions so we can loop over them 
+   art_dist_region <- art_dist %>% left_join(., spdf_comm_zmb, by = c("district" = "psnu")) %>% 
+    select(-c(uid, operatingunit, operatingunituid, geometry))
+   
+   plot_spark <- function(df) {
+     df %>% 
+       mutate(
+         art_start = if_else(calendar_quarter == "CY2019Q1", art_est, NA_real_),
+         art_end = if_else(calendar_quarter == "CY2020Q3", art_est, NA_real_),
+       ) %>% 
+       group_by(district, sex) %>% 
+       fill(., art_start, .direction = "down") %>% 
+       fill(., art_end, .direction = "up") %>% 
+       ungroup() %>% 
+       mutate(color = if_else(art_end - art_start < 0, old_rose, scooter)) %>% 
+       ggplot(aes(x = calendar_quarter, y = art_est, color = color, group = paste0(district, "-", sex)))+
+       geom_line(size = 15) +
+       si_style_void() +
+       scale_color_identity() +
+       theme(legend.position = "none")
+   }
+   
+   # Nest the ggplots in a dataframe
+   # Ensure that key variables remain for table
+   spark_lines <- art_dist_region %>% 
+     filter(snu1 == "Eastern") %>% 
+     filter(sex != "both", str_detect(calendar_quarter, "(CY2019|CY2020)")) %>% 
+     select(-age_group) %>% 
+     mutate(colvar = district,
+            disag = sex) %>% 
+     nest(art = c(calendar_quarter, art_est, district, sex)) %>% 
+     mutate(plot = map(art, plot_spark)) 
+   
+   # Reshape data wide for table plot
+   art_wide <-  
+     art_dist_region %>% 
+     filter(snu1 == "Eastern") %>% 
+     select(-age_group) %>% 
+     filter(sex != "both", str_detect(calendar_quarter, "(CY2019|CY2020)")) %>% 
+     pivot_wider(names_from = calendar_quarter, values_from = art_est) 
+   
+   
+   
+   # Pass wide data to gt then use text_transform() to embed sparkline
+   art_wide %>% 
+     mutate(ggplot = NA) %>% 
+     gt() %>% 
+     text_transform(
+       locations = cells_body(vars(ggplot)),
+       fn = function(x){
+         map(spark_lines$plot, ggplot_image, height = px(15), aspect_ratio = 4)
+       }
+     ) %>% 
+     cols_width(vars(ggplot) ~ px(100)) %>% 
+     cols_label(
+       ggplot = "Trend"
+     ) %>% 
+     fmt_number(5:11, decimals = 0)
+   
+
 # WRITE and CLOSE OUT -----------------------------------------------------
 
   write_csv(art_dist, here(dataout, "ART_main_file_long_district.csv"))

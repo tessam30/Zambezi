@@ -7,32 +7,33 @@
 # GLOBALS -----------------------------------------------------------------
 
   # Source basemap layers and check rendering
-  source("Scripts/00_setup_maps.R")
+  #source("Scripts/00_setup_maps.R")
 
   library(ICPIutilities)
-  library(tidyverse)
   library(glamr)
   library(here)
   library(glitr)
   library(gisr)
   library(scales)
   library(sf)
+  library(rgdal)
+  library(raster)
   library(extrafont)
   library(tidytext)
-  library(patchwork)   
+  library(patchwork)
+  library(tidyverse)
+
   
+
+  # Load configs & retrieve pepfar polygons
+  source("./Scripts/Z01_fetch_spdfs.R")
+
+
+  # Set Filters
   indics <- c("KP_PREV")
-  
-  datain <- "Data"
-  dataout <- "Datout"
-  images <- "Images"
-  pepfargis <- "../../GEODATA/PEPFAR/" #Not gis as this path is set in 00_setup source call
-  datim <- "../../DATIM_DATA/"
-  
   caption <- paste0("Source: DATIM MSD PSNU_IM_FY18-21_20201218 | Created on: ", Sys.Date())
   
   # Target function - generate aggregates for FY21
-  
     sum_targets <- function(.df, ...) {
     
         .df %>% 
@@ -41,31 +42,57 @@
         summarise(targets = sum(targets, na.rm = TRUE)) %>% 
         ungroup()
     }
+    
+    
+    # Latest MSD PSNU x IM File - Curr release
+    file_msd <- return_latest(folderpath = datim, 
+                              pattern = "MER_S.*_PSNU_IM_FY18-21_\\d{8}_v.*Zambia.*.zip")
+    
+    # Geodata
+    file_shp <- list.files(
+          path = shpdata, 
+          pattern = "VcPepfarPolygons.shp$",
+          recursive = TRUE,
+          full.names = TRUE
+          ) %>% 
+      sort() %>% 
+      last()
+    
+    # Levels
+    df_lvls <- glamr::identify_levels(datim_user(), datim_pwd())
+    
   
 # LOAD AND MUNGE MER DATA -------------------------------------------------
 
   # First, load geodata
     # Pull in unique id for all psnus in zambia
-    msd_geo <- read_msd(here(datim, "MER_Structured_Datasets_PSNU_IM_FY18-21_20201218_v2_1_Zambia.txt")) %>% 
-      dplyr::select(psnuuid, psnu, operatingunit, operatingunituid)
+    msd_geo <- 
+      read_msd(file_msd) %>% 
+      select(psnuuid, psnu, operatingunit, operatingunituid, snu1)
     
-    # Unique psnuuids/operatingunituids needed to filter the PEPFAR global dataset and admin0 boundary
-     uids <- msd_geo %>%  distinct(psnuuid, operatingunituid, psnu)
+  # Unique psnuuids/operatingunituids needed to filter the PEPFAR global dataset and admin0 boundary
+    uids <- 
+      msd_geo %>% 
+      distinct(psnuuid, operatingunituid, psnu, snu1, snu1uid)
     
     # Load Zambia Shapefile and filter to psnus
       zmb_geo <- 
-        st_read(here(pepfargis, "VcPepfarPolygons.shp")) %>% 
+        st_read(file_shp) %>% 
         filter(uid %in% uids$psnuuid) %>% 
         rename(psnuuid = uid)
     
       zmb_admin0 <- 
-        st_read(here(pepfargis, "VcPepfarPolygons.shp")) %>% 
+        st_read(file_shp) %>% 
         filter(uid %in% uids$operatingunituid) 
 
+      amb_admin1 <- 
+        st_read(file_shp) %>% 
+        filter(uid %in% uids$snu1uid)
+      
     remove(msd_geo)
  
   # Lad datim data for munging
-    msd <- read_msd(here(datim, "MER_Structured_Datasets_PSNU_IM_FY18-21_20201218_v2_1_Zambia.txt")) %>% 
+    msd <- read_msd(file_msd) %>% 
       filter(indicator %in% indics, standardizeddisaggregate == "Total Numerator") %>% 
       mutate(fundingagency = if_else(fundingagency == "HHS/CDC", "CDC", fundingagency))
   
@@ -109,17 +136,22 @@
 
 # MAP & PLOT --------------------------------------------------------------
 
-    # Make bounding box in case map needs to be cropped to msd_geo range
-      mapRange <- c(range(st_coordinates(msd_geo)[, 1]), range(st_coordinates(msd_geo)[, 2]))
+  # Make bounding box in case map needs to be cropped to msd_geo range
+    mapRange <- c(range(st_coordinates(msd_geo)[, 1]), range(st_coordinates(msd_geo)[, 2]))
     
-    
+  # Terrain map
+   terr_map <-  terrain_map("Zambia",
+                terr_path = rasdata,
+                adm0 = zmb_admin0,
+                adm1 = zmb_admin1)
     
   # Basic filled map showing where CDC and USAID have KP_PREV coverage  
       kp_cov_map <- 
-        ggplot() +
+        terr_map +
          geom_sf(data = zmb_geo, fill = grey10k, colour = grey20k, alpha = 0.5) +
-         geom_sf(data = msd_geo %>% filter(fundingagency != "NA"), 
-                 aes(fill = fill_color), color = grey90k, size = 0.75) +
+         geom_sf(data = msd_geo %>% filter(fundingagency != "NA") %>% distinct(psnuuid, fundingagency, fill_color), 
+                 aes(fill = fill_color), color = grey90k, size = 0.75, alpha = 0.75) +
+         geom_sf(data = zmb_admin1, fill = "NA", colour = grey70k, size = 0.5, linetype = "dotted") +
          geom_sf(data = zmb_admin0, fill = "NA", colour = grey70k, size = 1) +
          ggrepel::geom_label_repel(data = msd_geo %>% filter(fundingagency != "NA") %>%
                                     distinct(psnu, COORDS_X, COORDS_Y, fundingagency),
@@ -129,6 +161,7 @@
                       force = 6,
                       fill = alpha(c("white"), 0.75),
                       label.size = NA,
+                      label.padding = 0.1,
                       family = "Source Sans Pro Light") +
          facet_wrap(~fundingagency) +
          scale_fill_identity() +
@@ -150,9 +183,11 @@
     
   # Plot target volumes by psnu 
     map_targets <-  
-      ggplot() +
+      terr_map +
        geom_sf(data = zmb_geo, fill = grey10k, colour = grey20k, alpha = 0.5) +
-       geom_sf(data = msd_geo_totals %>% filter(fundingagency != "NA"), aes(fill = targets), alpha = 0.85) + 
+       geom_sf(data = msd_geo_totals %>% filter(fundingagency != "NA"), 
+               aes(fill = targets), alpha = 0.85) + 
+      geom_sf(data = zmb_admin1, fill = "NA", colour = grey70k, size = 0.5, linetype = "dotted") +
        geom_sf(data = zmb_admin0, fill = "NA", colour = grey70k, size = 1) +
       # ggrepel::geom_label_repel(data = msd_geo %>% filter(fundingagency != "NA") %>%
       #                             distinct(psnu, COORDS_X, COORDS_Y, fundingagency),
@@ -204,7 +239,7 @@
 
   # Map by IPs
      map_partner <- 
-       ggplot() +
+       terr_map +
         geom_sf(data = zmb_geo, fill = grey10k, colour = grey20k, alpha = 0.5) +
         geom_sf(data = msd_geo_partner_totals_sf %>% filter(fundingagency != "NA") %>% 
                   mutate(agency_partner = paste0(fundingagency, ": ", primepartner, "\n")), 
@@ -261,7 +296,7 @@
   # Map IPS + Bar graph + CDC on LHS + USAID on RHS
   # Functions for agency calls
      agency_map <- function(agency)   {
-         map_partner <- ggplot() +
+         map_partner <- terr_map +
            # geom_tile(data = filter(spdf, SR_LR < 210), aes(x = x, y = y, alpha = SR_LR)) +
            # scale_alpha(name = "", range = c(0.6, 0), guide = F) +
            # theme(legend.position = "none") + 

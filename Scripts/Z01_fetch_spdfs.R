@@ -71,6 +71,11 @@
   facility_points <- 
     df_locs %>% 
     gisr::extract_facilities()
+  
+  # Get a terrain map for Zambia
+  terr_map <- gisr::terrain_map(country, adm1 = spdf_reg_zmb,
+                          adm0 = spdf_ou_zmb,
+                          terr_path = rasdata)
     
   # Clean up workspace
   remove(df_locs, df_lvls, df_ous, spdf_pepfar)  

@@ -38,18 +38,6 @@ vignettes/*.pdf
 # R Environment Variables
 .Renviron
 
-#no data
-*.csv
-*.xlsx
-*.png
-<<<<<<< HEAD
-*.zip
-=======
-*.txt
-*.Rds
-*.dta
-*.xls
->>>>>>> dcf1edb22cbb9f32cd162c45d3fb17b6c8680d0f
 
 #no GIS Data
 GIS/*
@@ -57,10 +45,7 @@ Data/*
 Dataout/*
 Images/*
 Graphics/*
-<<<<<<< HEAD
 BOBs/
-=======
->>>>>>> dcf1edb22cbb9f32cd162c45d3fb17b6c8680d0f
 
 #no data
 *.csv
@@ -77,3 +62,4 @@ BOBs/
 GIS/*
 Images/*
 Graphics/*
+Documents/*

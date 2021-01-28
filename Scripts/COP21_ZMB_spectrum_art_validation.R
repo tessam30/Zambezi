@@ -19,11 +19,13 @@
   library(patchwork)
 
   library(gt)
+  library(gtsummary)
 
   #Data folder
   cop_data <- "Data/COP21"
   images <- "Images"
   dataout <- "Dataout/COP21"
+  docs <- "Documents"
   
   # Filter and spread count of quarters
   count_qtrs <- function(df) {
@@ -265,10 +267,17 @@
    }
    
    # Nest the ggplots in a dataframe
+   
+    # Wrap Below in a function to loop over provinces and to allow for age filter
    # Ensure that key variables remain for table
+   
+   art_table <- function(province) {
+     
+     
    spark_lines <- art_dist_region %>% 
-     filter(snu1 == "Eastern") %>% 
-     filter(sex != "both", str_detect(calendar_quarter, "(CY2019|CY2020)")) %>% 
+     filter(snu1 == {{province}}) %>% 
+     filter(str_detect(calendar_quarter, "(CY2019|CY2020)")) %>% 
+     arrange(sex, district) %>% 
      select(-age_group) %>% 
      mutate(colvar = district,
             disag = sex) %>% 
@@ -278,17 +287,22 @@
    # Reshape data wide for table plot
    art_wide <-  
      art_dist_region %>% 
-     filter(snu1 == "Eastern") %>% 
+     filter(snu1 == {{province}}) %>% 
      select(-age_group) %>% 
-     filter(sex != "both", str_detect(calendar_quarter, "(CY2019|CY2020)")) %>% 
-     pivot_wider(names_from = calendar_quarter, values_from = art_est) 
-   
-   
+     filter(str_detect(calendar_quarter, "(CY2019|CY2020)")) %>% 
+     pivot_wider(names_from = calendar_quarter, values_from = art_est) %>% 
+     mutate(`Difference` = CY2020Q3 - CY2019Q1,
+            `Percent Change` = (CY2020Q3/CY2019Q1) - 1) %>% 
+     rename(Age = "age")
    
    # Pass wide data to gt then use text_transform() to embed sparkline
-   art_wide %>% 
+    art_gt <- 
+     art_wide %>% 
      mutate(ggplot = NA) %>% 
-     gt() %>% 
+     gt(
+       rowname_col = "district",
+       groupname_col = "sex"
+     ) %>% 
      text_transform(
        locations = cells_body(vars(ggplot)),
        fn = function(x){
@@ -299,7 +313,33 @@
      cols_label(
        ggplot = "Trend"
      ) %>% 
-     fmt_number(5:11, decimals = 0)
+       cols_hide(columns = vars(snu1)) %>% 
+     fmt_number(5:12, decimals = 0) %>% 
+     fmt_percent(13, decimals = 0) %>% 
+     tab_options(row_group.background.color = trolley_grey_light) %>% 
+       tab_header(title = paste0("ART estimates for ", {{province}}, " Province")) %>% 
+      tab_style(
+        style = cell_fill(color = old_rose_light, alpha = 0.25),
+        locations = cells_body(
+          columns = vars(`Percent Change`),
+          rows = `Percent Change` < 0
+        )
+      ) %>% 
+      tab_source_note(source_note = "Source: ART Main file.xlsx")
+   
+      art_gt %>% as_raw_html() 
+  
+       gtsave(art_gt, here(docs, paste0("15+ ART estimates for ", {{province}}, " Province.png")))
+     }
+   
+   
+   art_dist_region %>% 
+     distinct(snu1) %>% 
+     pull() %>% 
+     map(., .f = ~art_table(.x))
+   
+   art_table("Muchinga")
+   
    
 
 # WRITE and CLOSE OUT -----------------------------------------------------

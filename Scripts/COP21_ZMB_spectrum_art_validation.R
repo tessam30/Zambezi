@@ -35,20 +35,22 @@
       prinf()
   }
   
-  compare_lists <- function(df1, df2) {
+  # Function will return list of districts that are not equal
+  compare_districts <- function(df1, df2, compare_var) {
     
     dist1 <- df1 %>% 
-      distinct(district) %>% 
+      distinct({{compare_var}}) %>% 
       pull()
     
     dist2 <- df2 %>% 
-      distinct(district) %>% 
+      distinct({{compare_var}}) %>% 
       pull
     
     print(setequal(dist1, dist2))
     
   }
   
+  # Plot the calendar quarter frequencies as a heatmap
   calendar_plot <- function(df) {
     df %>% 
     ggplot(aes(x = calendar_quarter, y = sex, fill = factor(n))) +
@@ -122,7 +124,7 @@
       mutate(district = if_else(district == "Mushindano", "Mushindamo", district))
   
   # Check that both data frames are using same district names
-    compare_lists(art_unaids, art_dist)
+    compare_districts(art_unaids, art_dist, district)
     
     
   # Something is a little funky with the counts for combo categories
@@ -130,7 +132,7 @@
     count_qtrs(art_unaids)
     count_qtrs(art_dist)
     
-  # So lets make a visualization of the problem
+  # So lets make a visualization of the problem for each dataset and then stitch together with patchwork
   art_moh_plot <-  
     art_unaids %>% 
       full_join(., art_dist %>% select(calendar_quarter, age, sex, district)) %>% 
@@ -154,8 +156,12 @@
   art_moh_plot / art_main_plot  
   si_save(here(images, "ZMB_ART_validation_plot.png"), scale = 1.5)
     
-    
-  art_unaids %>% count(calendar_quarter, age, sex) %>% spread(sex, n) %>%  prinf()
+  # Printed table of the issue we are seeing
+  # For under 15s data in cq CY2018Q3 is doubled, same issue for CY2018Q4 and male/females
+  art_unaids %>% 
+    count(calendar_quarter, age, sex) %>% 
+    spread(sex, n) %>%  
+    prinf()
   
   art_unaids %>% filter(calendar_quarter == "CY2018Q4") %>% 
     count(calendar_quarter, age, sex, district) %>% 
@@ -243,53 +249,45 @@
      summarise(tot = sum(art_est)) %>% 
      spread(calendar_quarter, tot)
    
+   # Create the full sized data frame to fix the MOD data column for complete calendar_quarters
+  cq_full <-  art_dist %>% distinct(calendar_quarter, sex, age, age_group, district)
+   
   
   # Attempt fix -- assumption is that 2nd entry belongs in CY2019Q1 
   art_unaids_flytrap <- 
-    art_unaids %>% 
-    mutate(district = if_else(district == "Mushindano", "Mushindamo", district)) %>% 
+    cq_full %>% 
+    left_join(art_unaids) %>% 
     group_by(district, calendar_quarter, age_group, sex) %>% 
-    mutate(group_count = n(), row_num = row_number()) %>% 
-    ungroup()  
-    # mutate(calendar_quarter = if_else(row_num == 2, "CY2019Q1", calendar_quarter))
-  
-  art_joined_flytrap <- 
-    art_unaids_flytrap %>% 
-    left_join(., art_dist, by = c("calendar_quarter", "age", "sex", "age_group", "district")) %>% 
-    mutate(art_validated = art_est - art_current, 
-           art_issue_flag = art_validated == 0)
-
-  # So for validations != 0 the pattern is row_num == 1, sex == "both, cq = "CY2018Q3"
-  # and for sex != "both, the pattern is row_num == 2 and cq == "CY2018Q4"
-  
-  
-  
-     
-  # Separate out
-  # recode CY2019Q2 to be CY2019Q1
-  # 
-  art_joined_flies_caught <- art_joined_flytrap %>% filter(art_validated != 0) %>% 
-    mutate(calendar_quarter = case_when(
-      calendar_quarter == "CY2019Q2" & sex == "both" ~ "CY2019Q1",
-      calendar_quarter == "CY2018Q3" & sex == "both" ~ "CY2019Q2",
+    mutate(group_count = n(), 
+           row_num = row_number()) %>% 
+    group_by(district, sex, age_group) %>% 
+    mutate(lag_count = row_number()) %>% 
+    mutate(art_proposed = case_when(
+      # Fix under 15s
+      calendar_quarter == "CY2019Q1" & sex == "both" ~ lead(art_current, n = 1),
+      calendar_quarter == "CY2019Q2" & sex == "both" ~ lag(art_current, n = 4),
       
-      calendar_quarter == "CY2019Q2" & sex != "both" ~ "CY2019Q1",
-      calendar_quarter == "CY2018Q4" & sex != "both" ~ "CY2019Q2",
-    )) %>% 
-    select(-c(art_est, art_issue_flag))
-  
-  # Remove entries that have validation errors from join then fold in "new" data
- tmp <-  art_joined_flytrap %>% 
-    filter(art_issue_flag == TRUE) %>% 
-    full_join(., art_joined_flies_caught, by =c("calendar_quarter", "age", "sex", "age_group", "district"))
-  
-  
-  
-  # Rules for fixing appear to be:
-  # 1) for sex == "both" --> art_validated != 0 --> CY2018Q3 goes to CY2019Q2
-  # CY2019Q2 gets bumped up to CY2018Q4, and extra row needs to be deleted in CY2018Q3
-  # code is art_validated != 0 & calendar_quarter == "CY2018Q3"
-  
+      calendar_quarter == "CY2019Q1" & sex %in% c("male","female") ~ lead(art_current, n = 1),
+      calendar_quarter == "CY2019Q2" & sex %in% c("male","female") ~ lag(art_current, n = 2),
+      TRUE ~ art_current)
+    ) %>% 
+    ungroup %>% 
+    mutate(keep_row_flag = case_when(
+      calendar_quarter == "CY2018Q3" & sex == "both" & lag_count == 3 ~ 0,
+      calendar_quarter == "CY2018Q4" & sex %in% c("male","female") & lag_count == 5 ~ 0,
+      TRUE ~ 1)
+      ) %>% 
+    filter(keep_row_flag == 1)
+    
+  # This is the "fixed" MOH data
+  art_joined_flytrap <- 
+    art_dist %>% 
+    left_join(., art_unaids_flytrap, by = c("calendar_quarter", "age", "sex", "age_group", "district")) %>% 
+    mutate(art_current_validated = art_est - art_current,
+           art_proposed_validated = art_est - art_proposed,
+           art_issue_flag_orig = art_current_validated == 0,
+           art_issue_flag_prop = art_proposed_validated == 0)
+
    
 # TABLES AND SPARKLINES ---------------------------------------------------
 
@@ -297,13 +295,28 @@
    
    #ggplot for the sparkline
    # Add in Regions so we can loop over them 
-   art_dist_region <- art_dist %>% left_join(., spdf_comm_zmb, by = c("district" = "psnu")) %>% 
+   art_dist_region <- 
+   art_dist %>% 
+   left_join(., spdf_comm_zmb, by = c("district" = "psnu")) %>% 
     select(-c(uid, operatingunit, operatingunituid, geometry))
+ 
+ 
+  art_unaids_region <- 
+    cq_full %>% 
+    left_join(art_unaids) %>% 
+    group_by(district, calendar_quarter, age_group, sex, age, area_id) %>% 
+    summarise(art_summed = sum(art_current, na.rm = T)) %>% 
+    ungroup() %>% 
+    left_join(., spdf_comm_zmb, by = c("district" = "psnu")) %>% 
+    select(-c(uid, operatingunit, operatingunituid, geometry, area_id)) %>% 
+    rename(art_est = "art_summed")
+    
+  
    
    plot_spark <- function(df) {
      df %>% 
        mutate(
-         art_start = if_else(calendar_quarter == "CY2019Q1", art_est, NA_real_),
+         art_start = if_else(calendar_quarter == "CY2018Q1", art_est, NA_real_),
          art_end = if_else(calendar_quarter == "CY2020Q3", art_est, NA_real_),
        ) %>% 
        group_by(district, sex) %>% 
@@ -323,12 +336,13 @@
     # Wrap Below in a function to loop over provinces and to allow for age filter
    # Ensure that key variables remain for table
    
-   art_table <- function(province) {
+   art_table <- function(df, province) {
     
     # Generates nested sparklines to be inserted into table cells  
-    spark_lines <- art_dist_region %>% 
+    spark_lines <- 
+      df %>% 
      filter(snu1 == {{province}}) %>% 
-     filter(str_detect(calendar_quarter, "(CY2019|CY2020)")) %>% 
+     #filter(str_detect(calendar_quarter, "(CY2019|CY2020)")) %>% 
      arrange(sex, district) %>% 
      select(-age_group) %>% 
      mutate(colvar = district,
@@ -338,14 +352,15 @@
    
    # Reshape data wide for table plot -- data frame appearance will be table appearance
    art_wide <-  
-     art_dist_region %>% 
+     df %>% 
      filter(snu1 == {{province}}) %>% 
      select(-age_group) %>% 
-     filter(str_detect(calendar_quarter, "(CY2019|CY2020)")) %>% 
+     #filter(str_detect(calendar_quarter, "(CY2019|CY2020)")) %>% 
      pivot_wider(names_from = calendar_quarter, values_from = art_est) %>% 
-     mutate(`Difference` = CY2020Q3 - CY2019Q1,
-            `Percent Change` = (CY2020Q3/CY2019Q1) - 1) %>% 
-     rename(Age = "age")
+     mutate(`Difference` = CY2020Q3 - CY2018Q1,
+            `Percent Change` = (CY2020Q3/CY2018Q1) - 1) %>% 
+     rename(Age = "age") %>% 
+     rename_if(startsWith(names(.), "CY"), ~str_remove_all(., "CY"))
    
    # Pass wide data to gt then use text_transform() to embed sparkline
     art_gt <- 
@@ -366,8 +381,9 @@
        ggplot = "Trend"
      ) %>% 
        cols_hide(columns = vars(snu1)) %>% 
-     fmt_number(5:12, decimals = 0) %>% 
-     fmt_percent(13, decimals = 0) %>% 
+     #fmt_number(5:12, decimals = 0) %>% 
+     fmt_number(3:13, decimals = 0) %>% 
+      fmt_percent(15, decimals = 0) %>% 
      tab_options(row_group.background.color = trolley_grey_light) %>% 
        tab_header(title = paste0("ART estimates for ", {{province}}, " Province")) %>% 
       tab_style(
@@ -379,9 +395,9 @@
       ) %>% 
       tab_source_note(source_note = "Source: ART Main file.xlsx")
    
-      art_gt %>% as_raw_html() 
+      art_gt 
   
-       gtsave(art_gt, here(docs, paste0("ART estimates for ", {{province}}, " Province.png")))
+       gtsave(art_gt, here(docs,  paste0("MOH ART estimates for ", {{province}}, " Province.png")))
      }
    
   # Loop over provinces and export full table    
@@ -390,7 +406,7 @@
      pull() %>% 
      map(., .f = ~art_table(.x))
    
-
+  art_table(art_unaids_region, "Central")
    
    
 
@@ -398,4 +414,5 @@
 
   write_csv(art_dist, here(dataout, "ART_main_file_long_district.csv"))
   write_csv(art_joined, here(dataout, "ZMB_ART_joined_validated.csv"))
+  write_csv(art_joined_flytrap, here(dataout, "ZMB_ART_join_validated_fixed_moh.csv"))
   

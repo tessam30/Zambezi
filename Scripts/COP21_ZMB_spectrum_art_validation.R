@@ -118,7 +118,8 @@
         TRUE ~ "15+"
       )) %>%
       rename(district = "area_name") %>% 
-      arrange(calendar_quarter)
+      arrange(calendar_quarter) %>% 
+      mutate(district = if_else(district == "Mushindano", "Mushindamo", district))
   
   # Check that both data frames are using same district names
     compare_lists(art_unaids, art_dist)
@@ -155,7 +156,7 @@
   si_save(here(images, "ZMB_ART_validation_plot.png"), scale = 1.5)
     
     
-  art_unaids %>% count(calendar_quarter, age, sex) %>% prinf()
+  art_unaids %>% count(calendar_quarter, age, sex) %>% spread(sex, n) %>%  prinf()
   
   art_unaids %>% filter(calendar_quarter == "CY2018Q4") %>% 
     count(calendar_quarter, age, sex, district) %>% 
@@ -177,7 +178,7 @@
     group_by(sex, age, district, calendar_quarter) %>% 
     mutate(tot = sum(art_validated)) %>% 
     ungroup() %>% 
-    filter(art_issue_flag == "FALSE")
+    filter(is.na(art_issue_flag)|art_issue_flag != "TRUE", )
   
   max <- max(abs(art_joined_range$tot))
   
@@ -191,21 +192,24 @@
                           limits = c(-1 * max/10, max/10), 
                           breaks = breaks_pretty(n = 6),
                           labels = scales::comma,
-                         oob = squish) +
+                         oob = squish, 
+                         na.value = trolley_grey_light) +
     si_style_xline() +
       scale_y_discrete(limits = rev) +
       scale_x_discrete(position = "top") +
     labs(x = NULL, y = NULL,
-         title = "ART CURRENT NUMBERS FROM THE ZAMBIA MOH/UNAIDS DATASET\nDIFFERED FROM THE ART MAIN FILE ESTIMATES IN THREE TIME PERIODS",
+         title = "<span style = 'font-size:14pt; font-family:SourceSansPro;'>ART CURRENT NUMBERS FROM THE ZAMBIA MOH/UNAIDS DATASET<br>DIFFERED FROM THE ART MAIN FILE ESTIMATES IN FOUR TIME PERIODS</span>",
          fill = "Deviation from \nART Main data",
          subtitle = 
            "<span style = 'color:#c51b7d;'>**Dark pink boxes**</span> 
-           indicate much lower values compared with ART main data<br> and <span style = 'color:#4d9221;'>**dark green boxes**</span> are much higher </span>",
-         caption = "Source: Comparison of 20210124t18-00utc-zambia-moh-art-unaids-art-program-data.csv and ART Main file.xlsx") +
+           indicate much lower values compared with ART main data and <span style = 'color:#4d9221;'>**dark green boxes**</span> are much higher </span>.
+         <br><span style = 'color:#808080;'>**Light gray boxes are**</span> missing data.</span>",
+         caption = "Source: Comparison of 20210124t18-00utc-zambia-moh-art-unaids-art-program-data.csv and ART Main file.xlsx", 
+         color = "No data") +
     theme(strip.text = element_blank(),
           legend.key.width = unit(1.5, "cm"),
-          text = element_text(family = "Source Sans Pro"),
-          plot.subtitle = element_markdown(size = 11, lineheight = 1.2))
+          plot.title = element_markdown(family = "Source Sans Pro"),
+          plot.subtitle = element_markdown(size = 11))
 
   si_save(here(images, "ZMB_ART_validation_summary.png"),
           height = 11.5, 
@@ -216,7 +220,7 @@
 
   source("./Scripts/Z01_fetch_spdfs.R")
   
-  districts <- art_main_long %>% distinct(district) %>% pull()
+  districts <- art_unaids %>% distinct(district) %>% pull()
   districts_geo <- spdf_comm_zmb %>% distinct(psnu) %>% pull()
   setdiff(districts, unique(spdf_comm_zmb$psnu))
   
@@ -237,8 +241,54 @@
      summarise(tot = sum(art_est)) %>% 
      spread(calendar_quarter, tot)
    
-   
+  
+  # Attempt fix -- assumption is that 2nd entry belongs in CY2019Q1 
+  art_unaids_flytrap <- 
+    art_unaids %>% 
+    mutate(district = if_else(district == "Mushindano", "Mushindamo", district)) %>% 
+    group_by(district, calendar_quarter, age_group, sex) %>% 
+    mutate(group_count = n(), row_num = row_number()) %>% 
+    ungroup()  
+    # mutate(calendar_quarter = if_else(row_num == 2, "CY2019Q1", calendar_quarter))
+  
+  art_joined_flytrap <- 
+    art_unaids_flytrap %>% 
+    left_join(., art_dist, by = c("calendar_quarter", "age", "sex", "age_group", "district")) %>% 
+    mutate(art_validated = art_est - art_current, 
+           art_issue_flag = art_validated == 0)
 
+  # So for validations != 0 the pattern is row_num == 1, sex == "both, cq = "CY2018Q3"
+  # and for sex != "both, the pattern is row_num == 2 and cq == "CY2018Q4"
+  
+  
+  
+     
+  # Separate out
+  # recode CY2019Q2 to be CY2019Q1
+  # 
+  art_joined_flies_caught <- art_joined_flytrap %>% filter(art_validated != 0) %>% 
+    mutate(calendar_quarter = case_when(
+      calendar_quarter == "CY2019Q2" & sex == "both" ~ "CY2019Q1",
+      calendar_quarter == "CY2018Q3" & sex == "both" ~ "CY2019Q2",
+      
+      calendar_quarter == "CY2019Q2" & sex != "both" ~ "CY2019Q1",
+      calendar_quarter == "CY2018Q4" & sex != "both" ~ "CY2019Q2",
+    )) %>% 
+    select(-c(art_est, art_issue_flag))
+  
+  # Remove entries that have validation errors from join then fold in "new" data
+ tmp <-  art_joined_flytrap %>% 
+    filter(art_issue_flag == TRUE) %>% 
+    full_join(., art_joined_flies_caught, by =c("calendar_quarter", "age", "sex", "age_group", "district"))
+  
+  
+  
+  # Rules for fixing appear to be:
+  # 1) for sex == "both" --> art_validated != 0 --> CY2018Q3 goes to CY2019Q2
+  # CY2019Q2 gets bumped up to CY2018Q4, and extra row needs to be deleted in CY2018Q3
+  # code is art_validated != 0 & calendar_quarter == "CY2018Q3"
+  
+   
 # TABLES AND SPARKLINES ---------------------------------------------------
 
    # TODO - Generate Tables for each Province and stitch together into PDF booklet
@@ -272,9 +322,9 @@
    # Ensure that key variables remain for table
    
    art_table <- function(province) {
-     
-     
-   spark_lines <- art_dist_region %>% 
+    
+    # Generates nested sparklines to be inserted into table cells  
+    spark_lines <- art_dist_region %>% 
      filter(snu1 == {{province}}) %>% 
      filter(str_detect(calendar_quarter, "(CY2019|CY2020)")) %>% 
      arrange(sex, district) %>% 
@@ -284,7 +334,7 @@
      nest(art = c(calendar_quarter, art_est, district, sex)) %>% 
      mutate(plot = map(art, plot_spark)) 
    
-   # Reshape data wide for table plot
+   # Reshape data wide for table plot -- data frame appearance will be table appearance
    art_wide <-  
      art_dist_region %>% 
      filter(snu1 == {{province}}) %>% 
@@ -329,16 +379,16 @@
    
       art_gt %>% as_raw_html() 
   
-       gtsave(art_gt, here(docs, paste0("15+ ART estimates for ", {{province}}, " Province.png")))
+       gtsave(art_gt, here(docs, paste0("ART estimates for ", {{province}}, " Province.png")))
      }
    
-   
+  # Loop over provinces and export full table    
    art_dist_region %>% 
      distinct(snu1) %>% 
      pull() %>% 
      map(., .f = ~art_table(.x))
    
-   art_table("Muchinga")
+
    
    
 

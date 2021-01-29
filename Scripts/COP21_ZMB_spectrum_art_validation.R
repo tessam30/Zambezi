@@ -131,7 +131,6 @@
     count_qtrs(art_dist)
     
   # So lets make a visualization of the problem
-    
   art_moh_plot <-  
     art_unaids %>% 
       full_join(., art_dist %>% select(calendar_quarter, age, sex, district)) %>% 
@@ -180,7 +179,9 @@
     ungroup() %>% 
     filter(is.na(art_issue_flag)|art_issue_flag != "TRUE", )
   
-  max <- max(abs(art_joined_range$tot))
+    # Grab max to make sure legend/fill is symmetric
+    max <- max(abs(art_joined_range$tot), na.rm = T)
+
   
     art_joined_range %>% 
     ggplot(aes(x = calendar_quarter, y = district, fill = (tot))) +
@@ -198,18 +199,19 @@
       scale_y_discrete(limits = rev) +
       scale_x_discrete(position = "top") +
     labs(x = NULL, y = NULL,
-         title = "<span style = 'font-size:14pt; font-family:SourceSansPro;'>ART CURRENT NUMBERS FROM THE ZAMBIA MOH/UNAIDS DATASET<br>DIFFERED FROM THE ART MAIN FILE ESTIMATES IN FOUR TIME PERIODS</span>",
+         title = "<span style = 'font-size:14pt;'>ART CURRENT NUMBERS FROM THE ZAMBIA MOH/UNAIDS DATASET<br>DIFFERED FROM THE ART MAIN FILE ESTIMATES IN FOUR TIME PERIODS</span>",
          fill = "Deviation from \nART Main data",
          subtitle = 
            "<span style = 'color:#c51b7d;'>**Dark pink boxes**</span> 
-           indicate much lower values compared with ART main data and <span style = 'color:#4d9221;'>**dark green boxes**</span> are much higher </span>.
+           indicate much lower values compared with ART main data and <span style = 'color:#4d9221;'>**dark green boxes**</span> are much higher.</span>
          <br><span style = 'color:#808080;'>**Light gray boxes are**</span> missing data.</span>",
          caption = "Source: Comparison of 20210124t18-00utc-zambia-moh-art-unaids-art-program-data.csv and ART Main file.xlsx", 
          color = "No data") +
     theme(strip.text = element_blank(),
           legend.key.width = unit(1.5, "cm"),
-          plot.title = element_markdown(family = "Source Sans Pro"),
-          plot.subtitle = element_markdown(size = 11))
+          plot.title = element_markdown(family = "Source Sans Pro Regular"),
+          plot.subtitle = element_markdown(size = 11, family = "Source Sans Pro"),
+          axis.text = element_markdown(family = "Source Sans Pro Light"))
 
   si_save(here(images, "ZMB_ART_validation_summary.png"),
           height = 11.5, 

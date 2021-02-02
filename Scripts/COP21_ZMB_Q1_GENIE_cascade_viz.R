@@ -17,6 +17,8 @@
   library(tidytext)
   library(extrafont)
   library(gt)
+  library(googlesheets4)
+  library(readxl)
 
   # Latest MSD PSNU x IM File - Curr release
   file_genie <- return_latest(folderpath = datim, 
@@ -27,6 +29,8 @@
   
   agencies <- c("USAID", "HHS/CDC")
   
+  
+  cop_data <- "Data/COP21"
   
   # Bar PLOT
   bar_plot <- function(df, indic) {
@@ -64,11 +68,82 @@
   }
   
 
+# READ IN GOOGLESHEET -----------------------------------------------------
+
+  excel_sheets(file.path(cop_data, "FY20 Q4 USAID Results Summary Table  11-12-2020.xlsx"))
+  
+  # Updated indicator list from Mission
+  tst_list <- c("HTS_TST", "HTS_TST_POS", "HTS_INDEX", "HTS_RECENT", "HTS_SELF")
+  pmtct_list <- c("PMTCT_ART", "PMTCT_EID", "PMTCT_HEI_POS", "PMTCT_STAT")
+  prep_list <- c("PrEP_NEW", "PrEP_CURR")
+  tb_list <- c("TB_ART", "TB_STAT")
+  tx_list <- c("TX_CURR", "TX_ML", "TX_NEW", "TX_PVLS", "TX_RTT")
+  vmmc_list <- c("VMMC_CIRC")
+  
+  df_indics <- 
+    df %>% 
+    filter(indicator %in% c(tst_list, tx_list, prep_list, pmtct_list, vmmc_list, tb_list),
+                standardizeddisaggregate == "Total Numerator",
+                fundingagency == "USAID",
+                period != "FY20", period_type != "cumulative") 
+  
+  
+  df_hts_yield <- 
+    df_indics %>% filter(indicator %in% c("HTS_TST", "HTS_TST_POS")) %>% 
+    group_by(primepartner, fundingagency, mech_code, mech_name, indicator, period) %>% 
+    summarise(total = sum(val, na.rm = TRUE)) %>% 
+    spread(indicator, total) %>% 
+    ungroup() %>% 
+    mutate(HTS_TST_YIELD = HTS_TST_POS / HTS_TST) %>% 
+    pivot_longer(cols = HTS_TST:HTS_TST_YIELD,
+                 names_to = "indicator",
+                 values_to = "total") 
+  
+  
+  df_indic_wide <- 
+    df_indics %>% 
+    group_by(indicator, fundingagency, primepartner, mech_code, mech_name, period) %>% 
+    summarise(total = sum(val, na.rm = TRUE)) %>% 
+    full_join(df_hts_yield) %>% 
+    spread(period, total) %>% 
+    select(-FY21, everything()) %>% 
+    mutate(achievement = FY21Q1 / FY21) %>% 
+    mutate(indic_flag = case_when(
+      indicator == "HTS_TST" ~ 1,
+      indicator == "HTS_TST_POS" ~ 2,
+      TRUE ~ 3
+    )) %>% 
+    arrange(mech_name, indicator, indic_flag) 
+    
+    
+  
+  
+  
+  
 # LOAD AND MUNGE ----------------------------------------------------------
   
   df <- read_msd(file_genie) %>% 
     reshape_msd(clean = T) 
     
+  # Testing modalities
+  df %>% filter(indicator %in% c("HTS_TST", "HTS_TST_POS"),
+                fundingagency == "USAID",
+                period != "FY20", period_type != "cumulative") %>% 
+    group_by(indicator, fundingagency, modality, period, period_type) %>% 
+    summarise(total = sum(val, na.rm = TRUE)) %>% 
+    spread(period, total)
+    prinf()
+  
+  
+  df %>% 
+    filter()
+    
+    
+    
+    
+  df %>% names()
+  
+  
   df_21 <- 
     df %>% 
     filter(str_detect(period, "2020", negate = TRUE))

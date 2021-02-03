@@ -31,6 +31,7 @@
   
   
   cop_data <- "Data/COP21"
+  cop_dataout <- "Dataout/COP21"
   
   # Bar PLOT
   bar_plot <- function(df, indic) {
@@ -70,7 +71,10 @@
 
 # READ IN GOOGLESHEET -----------------------------------------------------
 
+  # Table that we are replicating
   excel_sheets(file.path(cop_data, "FY20 Q4 USAID Results Summary Table  11-12-2020.xlsx"))
+  
+  
   
   # Updated indicator list from Mission
   tst_list <- c("HTS_TST", "HTS_TST_POS", "HTS_INDEX", "HTS_RECENT", "HTS_SELF")
@@ -117,8 +121,16 @@
     
   df_indic_wide %>% filter(primepartner != "TBD") %>% prinf()
     
+  # Targets for Local Treatment Partner Need to Map into EQUIP
+  write_csv(df_indic_wide, file.path(cop_dataout, "tmp.csv"))
   
-  df_indic_wide %>%
+  
+  
+  
+# Prep data for gt table and 
+gt_df <-  
+   df_indic_wide %>%
+   ungroup() %>% 
     mutate(mech_name_abr = case_when(
       mech_name == "USAID/District Coverage of Health Services (DISCOVER-H)" ~ "DISCOVER-H",
       mech_name == "USAID/Zambia Community HIV Prevention Project (Z-CHPP)"  ~ "Z-CHPP",
@@ -129,33 +141,106 @@
                                        "USAID Open Doors"), 1, 0),
       mech_new_name = paste0(mech_name_abr, " (", mech_code, ")"),
       `Q1 Growth` = ((FY21Q1/FY20Q1)-1)) %>%
-    filter(mech_flag == 1) %>% 
+    #filter(mech_flag == 1) %>% 
+   mutate(indicator = fct_relevel(indicator,
+                                  "HTS_TST",
+                                  "HTS_TST_POS",
+                                  "HTS_TST_YIELD",
+                                  "HTS_SELF",
+                                  "HTS_INDEX",
+                                  "HTS_RECENT",
+                                  "TX_NEW",
+                                  "TX_CURR",
+                                  "TX_PVLS",
+                                  "TX_ML",
+                                  "TX_RTT",
+                                  "PMTCT_STAT",
+                                  "PMTCT_ART",
+                                  "PMTCT_EID",
+                                  "PMTCT_HEI_POS",
+                                  "PrEP_CURR",
+                                  "PrEP_NEW",
+                                  "VMMC_CIRC")) %>% 
+   arrange(indicator) %>% 
+   mutate(indic_type = case_when(
+     str_detect(indicator, "HTS") ~ "Testing",
+     str_detect(indicator, "(TX|TB)") ~ "Treatment",
+     str_detect(indicator, "PMTCT") ~ "Treatment - Peds",
+     str_detect(indicator, "(PrEP|VMMC)") ~ "Prevention",
+     TRUE ~ NA_character_)
+   )
+
+ 
+
+# EXPORT EXCEL and CREATE TABLES ------------------------------------
+  
+ gt_df_export <- gt_df %>% 
+   select(IM = mech_new_name,
+          `Program Area` = indic_type,
+          indicator,
+          FY20Q1:FY21,
+          `FY21 Achievement`  = achievement,
+          `Q1 Growth`
+          ) %>% 
+   arrange(IM, indicator)
+ 
+ # DO ONLY Once or it will overwrite results
+ sheet_id <- "1j6w33jXcRsyrgrZuAHH43XkFi4TWFlYs2RdCdLy27ag"
+ 
+ #sheet_write(gt_df_export, ss = sheet_id, sheet = "Results Table")
+ #sheet_write(gt_df_export2, ss = sheet_id, sheet = "Reference Table")
+ 
+ write_csv(gt_df, file.path(cop_dataout, paste0("FY21 Q1 USAID Summary Table ", Sys.Date(), ".csv")))
+   
+ 
+ 
+ im_table <- function(mech_code_num) {
+    
+   im_name <- gt_df %>% filter(mech_code == {{mech_code_num}}) %>% distinct(mech_new_name) %>% pull(mech_new_name)
+   
+   gt_df %>% 
+     filter(mech_code == {{mech_code_num}}) %>% 
+     rename(`FY21 Targets` = FY21,
+            `Achievement` = achievement) %>% 
     gt(
-      groupname_col = "mech_new_name",
+      groupname_col = "indic_type",
       rowname_col = "indicator"
     ) %>% 
     cols_hide(columns = vars("fundingagency", "primepartner", "indic_flag", 
                              "mech_code", "mech_name", "mech_flag",
-                             "mech_name_abr")) %>% 
+                             "mech_name_abr", "mech_new_name")) %>% 
     fmt_number(columns = (contains("FY")), 
              decimals = 0) %>% 
     fmt_percent(columns = contains("FY"),
                 decimals =0,
                 rows = (indicator == "HTS_TST_YIELD")) %>% 
-    fmt_percent(columns = vars("achievement", `Q1 Growth`),
+    fmt_percent(columns = vars("Achievement", `Q1 Growth`),
                 decimals = 0) %>% 
     fmt_missing(columns = everything(), missing_text = "-") %>% 
-    tab_style(style = cell_fill(color = genoa_light, alpha = 0.5),
+    tab_style(style = cell_fill(color = genoa_light, alpha = 0.44),
               locations = cells_body(
-                columns = vars(`achievement`),
-                rows = `achievement` > 1)
+                columns = vars(`Achievement`),
+                rows = `Achievement` >= 1 & `Achievement` <= 1.25)
     ) %>% 
-    tab_style(style = cell_fill(color = old_rose_light, alpha = 0.5),
+    tab_style(style = cell_fill(color = genoa, alpha = 0.44),
+              locations = cells_body(
+                columns = vars(`Achievement`),
+                rows = `Achievement` >= 1.25)
+    ) %>% 
+    tab_style(style = cell_fill(color = old_rose_light, alpha = 0.33),
               locations = cells_body(
                 columns = vars(`Q1 Growth`),
-                rows = `Q1 Growth` < 0)
-    )
-    
+                rows = `Q1 Growth` < 0) 
+    ) %>% 
+     tab_header(title = paste0(im_name, " TRENDS AND RESULTS AS OF FY21Q1")) %>% 
+     tab_source_note("Source: DATIME GENIE pull 2021-02-02")
+ }
+     
+  # Loop over tables and write them to pngs
+ gt_df %>% 
+   distinct(mech_code, mech_name_abr) %>% 
+   pull(mech_code) %>% 
+   map(.x, .f = ~im_table(.x) %>% gtsave(file.path(images, paste0(.x, "_FY21 Q1 Results.png"))))
   
   
 # LOAD AND MUNGE ----------------------------------------------------------

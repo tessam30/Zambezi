@@ -115,9 +115,47 @@
     )) %>% 
     arrange(mech_name, indicator, indic_flag) 
     
+  df_indic_wide %>% filter(primepartner != "TBD") %>% prinf()
     
   
-  
+  df_indic_wide %>%
+    mutate(mech_name_abr = case_when(
+      mech_name == "USAID/District Coverage of Health Services (DISCOVER-H)" ~ "DISCOVER-H",
+      mech_name == "USAID/Zambia Community HIV Prevention Project (Z-CHPP)"  ~ "Z-CHPP",
+      mech_name == "USAID/Stop Gender Based Violence Project (Stop GBV)"     ~ "Stop GBV",
+      TRUE ~ mech_name),
+      mech_flag = if_else(mech_name_abr %in% c("Stop GBV", "DISCOVER-H", "Z-CHPP", 
+                                       "EQUIP", "Eradicate TB", "SAFE",
+                                       "USAID Open Doors"), 1, 0),
+      mech_new_name = paste0(mech_name_abr, " (", mech_code, ")"),
+      `Q1 Growth` = ((FY21Q1/FY20Q1)-1)) %>%
+    filter(mech_flag == 1) %>% 
+    gt(
+      groupname_col = "mech_new_name",
+      rowname_col = "indicator"
+    ) %>% 
+    cols_hide(columns = vars("fundingagency", "primepartner", "indic_flag", 
+                             "mech_code", "mech_name", "mech_flag",
+                             "mech_name_abr")) %>% 
+    fmt_number(columns = (contains("FY")), 
+             decimals = 0) %>% 
+    fmt_percent(columns = contains("FY"),
+                decimals =0,
+                rows = (indicator == "HTS_TST_YIELD")) %>% 
+    fmt_percent(columns = vars("achievement", `Q1 Growth`),
+                decimals = 0) %>% 
+    fmt_missing(columns = everything(), missing_text = "-") %>% 
+    tab_style(style = cell_fill(color = genoa_light, alpha = 0.5),
+              locations = cells_body(
+                columns = vars(`achievement`),
+                rows = `achievement` > 1)
+    ) %>% 
+    tab_style(style = cell_fill(color = old_rose_light, alpha = 0.5),
+              locations = cells_body(
+                columns = vars(`Q1 Growth`),
+                rows = `Q1 Growth` < 0)
+    )
+    
   
   
 # LOAD AND MUNGE ----------------------------------------------------------

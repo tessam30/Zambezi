@@ -88,16 +88,18 @@
                         "Age/Sex_Female_45-49", "Age/Sex_Female_50+")
 
   # Pull out standard disaggs; KeyPop pulled out separately -- they will distort targets and totals
-  prep_new_disag_kp <- 
+  # Oddly, the stddisag is KeyPop for PrEP_CURR and KeyPopAbr for NEW
+  
+  
+  prep_curr_disag_kp <- 
     genie %>% 
-      filter(indicator == "PrEP_NEW",
-             fundingagency == "USAID",
-             standardizeddisaggregate %in% c("KeyPopAbr")) %>% 
-      unite(combo, c(standardizeddisaggregate, otherdisaggregate), remove = F) %>%
+      filter(indicator == "PrEP_CURR",
+             standardizeddisaggregate %in% c("KeyPop")) %>%
+      unite(combo, c(standardizeddisaggregate, otherdisaggregate), remove = F) %>% 
       filter(str_detect(combo, "(FSW|MSM)")) %>% 
       mutate(disags = case_when(
-        combo == "KeyPopAbr_FSW" ~ "FSW",
-        combo == "KeyPopAbr_MSM" ~ "MSM",
+        combo == "KeyPop_FSW" ~ "FSW",
+        combo == "KeyPop_MSM" ~ "MSM",
         TRUE ~ NA_character_
       ), 
       core_disag = 0) %>% 
@@ -105,14 +107,13 @@
     group_by(disags, period, period_type, core_disag) %>% 
     summarise(total = sum(val, na.rm = TRUE)) %>% 
     ungroup() %>% 
-    unite(., "period_combo", c(period, period_type), remove = F) %>% 
-    filter(!period_combo %in% c("FY21Q1_results", "FY20Q2_results", "FY20Q4_results"))
+    unite(., "period_combo", c(period, period_type), remove = F)
+    # filter(!period_combo %in% c("FY21Q1_results", "FY20Q2_results", "FY20Q4_results"))
   
 
-  prep_new_disag <- 
+  prep_curr_disag <- 
     genie %>% 
-    filter(indicator == "PrEP_NEW",
-           fundingagency == "USAID",
+    filter(indicator == "PrEP_CURR",
            standardizeddisaggregate %in% c("Age/Sex")) %>% 
     unite(combo, c(standardizeddisaggregate, sex, ageasentered), remove = F) %>%
       mutate(disags = case_when(
@@ -128,12 +129,12 @@
     group_by(disags, period, period_type, core_disag) %>% 
     summarise(total = sum(val, na.rm = TRUE)) %>% 
     ungroup() %>% 
-    unite(., "period_combo", c(period, period_type), remove = F) %>% 
-    filter(!period_combo %in% c("FY21Q1_results", "FY20Q2_results", "FY20Q4_results"))
+    unite(., "period_combo", c(period, period_type), remove = F) 
+    #filter(!period_combo %in% c("FY21Q1_results", "FY20Q2_results", "FY20Q4_results"))
   
-  prep_new_disag_all <- 
-    prep_new_disag %>% 
-    bind_rows(prep_new_disag_kp) %>% 
+  prep_curr_disag_all <- 
+    prep_curr_disag %>% 
+    bind_rows(prep_curr_disag_kp) %>% 
     mutate(disags = fct_relevel(disags,
                             "M 15-19", 
                             "F 15-19",
@@ -143,11 +144,17 @@
                             "F 25-50+",
                             "FSW",
                             "MSM")
-           )
+           ) %>% 
+    filter(period_type != "cumulative") %>% 
+    spread(period_type, total) %>% # Set targets to repeat in same row as results
+    mutate(fy = str_extract(period, "\\d{2}")) %>% 
+    group_by(disags, fy) %>% 
+    fill(., targets, .direction ="down") %>% 
+    filter(!is.na(results))
 
 
-  prep_new_disag %>% 
-    group_by(period, period_type) %>% 
+  prep_curr_disag_all %>% 
+    group_by(period_combo, disags) %>% 
     summarise(total = sum(total, na.rm = TRUE))
 
   
@@ -208,31 +215,34 @@
   # Hi Tim, could you replicate this with prep curr but streamline with achievements and targets in the same bar? 
   # Q2 fy20 results against targets one bar , Apr fy20 results against targets another bar, q1 results against targets 
   # a third bar? Same age sex disaggs?  
-  max <- max(prep_new_disag_all$total)
+  max <- max(prep_curr_disag_all$targets) + 3000
   
-  prep_new_disag_all %>% 
-    select(-period_combo) %>% 
-    spread(period_type, total) %>% 
-    mutate(Achievement = cumulative / targets,
+  prep_curr_disag_all %>% 
+    #select(-period_combo) %>% 
+    #spread(period_type, total) %>% 
+    mutate(Achievement = results / targets,
            dotted_line = if_else(Achievement > 1, "white", trolley_grey_light)) %>% 
     ggplot(aes(x = period)) + 
-      geom_col(aes(y = targets), fill = grey10k) +
-      geom_col(aes(y = cumulative), 
-               fill = genoa, alpha = 0.75) +
-    geom_text(aes(y = cumulative, label = comma(cumulative)), vjust = -0.25, 
+      geom_col(aes(y = targets), fill = trolley_grey_light) +
+      geom_col(aes(y = results), 
+               fill = genoa, alpha = 1) +
+    geom_text(aes(y = results, label = comma(results, accuracy = 1)), vjust = -0.25, 
               color = genoa,
-              fontface = "bold") +
-    geom_text(data = . %>% filter(period == "FY21"),
+              fontface = "bold", 
+              size = 3) +
+    facet_wrap(~disags, nrow = 1, strip.position = "bottom") +
+    geom_text(data = . %>% filter(fy == "21", disags != "M 25-50+"), 
       aes(y = targets, label = comma(targets)), vjust = -0.5, 
-      color = trolley_grey) +
+      color = trolley_grey, 
+      size = 3) +
     geom_errorbar(aes(ymin = targets, 
                       ymax = targets, 
                       colour = dotted_line), 
                   size = 0.5, 
                   linetype = "dashed") +
-      si_style_xline() +
+        si_style_xline() +
       scale_y_continuous(labels = comma, expand = c(.01, 0),
-                         limits = c(0, max+ 1000)) +
+                         limits = c(0, max)) +
     facet_wrap(~disags, nrow = 1, strip.position = "bottom") +
     scale_color_identity() +
     theme(
@@ -243,14 +253,13 @@
       plot.subtitle = element_markdown(size = 11, family = "Source Sans Pro"),
       text = element_text(family = "Source Sans Pro")
     ) +
-    labs(x = NULL, y = NULL, title = "PrEP_NEW <span style = 'color:#287c6f;'>**RESULTS**</span> AND 
+    labs(x = NULL, y = NULL, title = "PrEP_CURR <span style = 'color:#287c6f;'>**RESULTS**</span> AND 
          <span style = 'color:#808080;'>**TARGETS**</span> BY AGE BANDS FOR USAID",
-         caption = "Source: Genie pull as of 2020-02-04")
-         # subtitle = "<span style = 'color:#287c6f;'>**Results in green**</span><span style = 'color:#808080;'>
-         # <br>Targets in grey</span style>")
+         caption = "Source: Genie pull as of 2020-02-04",
+         subtitle = "White dotted lines represent targets")
   
-  si_save(here(images, "ZMB_PrEP_NEW_disaggs_summary.png"),
-          scale = 1.25)
+  si_save(here(images, "ZMB_PrEP_CURR_disaggs_summary.png"),
+          scale = 1.45)
     
     
     prep_new_disag %>% 

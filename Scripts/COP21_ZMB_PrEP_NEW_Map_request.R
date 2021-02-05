@@ -187,7 +187,7 @@
     filter(!is.na(results))
     
 
-# VIZ  REQUEST -------------------------------------------------------------
+# PrEP VIZ REQUEST -------------------------------------------------------------
 
   # Hi Tim, could you replicate this with prep curr but streamline with 
   # achievements and targets in the same bar? Q2 fy20 results against 
@@ -344,64 +344,136 @@
     prep_geo %>% 
     filter(indicator == "PrEP_NEW") %>% 
     group_by(period_type, period, indicator, uid, psnu, snu1) %>% 
-    summarise(total = sum(val, na.rm = TRUE)) 
-  
-  %>% 
+    summarise(total = sum(val, na.rm = TRUE)) %>% 
     ungroup() %>% 
     filter(str_detect(period, "FY21"), period_type != "results")
   
   # Let's break this out into two layers with different color codings for each
-  prep_new_21 %>% 
+  prep_new_psnu <- 
+    prep_new_21 %>% 
     st_drop_geometry() %>% 
     mutate(targets_sort = ifelse(period_type == "targets", total, NA_real_)) %>% 
     group_by(psnu) %>% 
     fill(., targets_sort, .direction = "updown") %>% 
     mutate(group_count = n()) %>% 
+    filter(period_type != "targets", !is.na(psnu)) %>%  
     ungroup() %>% 
     mutate(targets_sort = if_else(is.na(targets_sort), total, targets_sort),
-           district_order = reorder_within(psnu, targets_sort, within = snu1)) %>% 
-    ggplot() +
-    geom_point(data = . %>% filter(period_type == "targets"), aes(x = total, y = district_order),
-               shape = 21, color = grey30k, size = 3, fill = trolley_grey_light) +
-    # scale_fill_si(palette = "trolley_greys", discrete = FALSE) +
-    # new_scale_fill() +
-    geom_point(data = . %>% filter(period_type == "cumulative"), 
-               aes(x = total, y = district_order),
-               shape = 21, color = grey30k, size = 3, fill = genoa, alpha = 0.75) +
-    scale_fill_si(palette = "moody_blues", discrete = FALSE) +
+           district_order = reorder_within(psnu, targets_sort, within = snu1),
+           dot_color = if_else(total < targets_sort, genoa_light, genoa),
+           target_line = if_else(total > targets_sort, "white", "NA"),
+           achievement = if_else(total > targets_sort, genoa, genoa_light)) 
+  
+  # Dot Plot
+    ggplot(data = prep_new_psnu) +
+    geom_segment(aes(x = total, xend = targets_sort, y = district_order, yend = district_order), 
+                 color = trolley_grey_light) +
+    geom_point(aes(x = targets_sort, y = district_order),
+               shape = 21, color = trolley_grey, size = 3, fill = trolley_grey_light) +
+    geom_point(aes(x = total, y = district_order, fill = dot_color),
+               shape = 21, size = 3, color = trolley_grey) +
+    scale_fill_identity() +
     si_style_xgrid() +
-    facet_wrap(~snu1, scales = "free") +
-    scale_y_reordered() 
+    facet_wrap(~snu1, scales = "free", nrow = 2) +
+    scale_y_reordered() +
+    labs(x = NULL, y = NULL, title = "PrEP_NEW Results to Targets for FY21")
   
+  # Bar graph rotated
+  prep_new_psnu_bar <- 
+    ggplot(data = prep_new_psnu) +
+      geom_col(aes(x = targets_sort, y = district_order), fill = grey10k,
+               position = position_dodge2(preserve = c("single"))) +
+      geom_col(aes(x = total, y = district_order, fill = achievement),
+               position = position_dodge2(preserve = c("single"))) +
+      geom_errorbar(aes(xmin = targets_sort,
+                        xmax = targets_sort,
+                        y = district_order,
+                        colour = target_line),
+                    size = 0.5,
+                    linetype = "dashed") +
+      geom_vline(xintercept = 0, color = grey70k, size = 0.5)+
+      scale_color_identity() +
+      scale_fill_identity() +
+      si_style_xgrid() +
+      facet_wrap(~snu1, scales = "free", ncol = 2) +
+      scale_y_reordered() +
+      scale_x_continuous(labels = comma) +
+      labs(x = NULL, y = NULL, title = "PrEP_NEW Results to Targets for FY21",
+           source = "Genie pull as of 2020-02-04") +
+      theme(
+        panel.spacing.x = unit(0.05, "cm"),
+        panel.spacing.y = unit(0.05, "cm"),
+      )
+    
+  si_save(here(images, "ZMB_PrEP_NEW_psnu_achievement.png"),
+          scale = 1.75, dpi = "retina",
+          plot = prep_new_psnu_bar,
+          height = 5.63,
+          width = 4.63)  
+    
+    
+  # Keep geometry, add achievement
+    prep_new_psnu_geo <- 
+      prep_new_21 %>% 
+      mutate(targets_sort = ifelse(period_type == "targets", total, NA_real_)) %>% 
+      group_by(psnu) %>% 
+      fill(., targets_sort, .direction = "updown") %>% 
+      mutate(group_count = n()) %>% 
+      filter(!is.na(psnu)) %>%  
+      ungroup() %>% 
+      mutate(achievement = total/targets_sort) 
+  
+    
+  # There are quite a few psnus that do not have targets
   terr_map +
-    geom_sf(data = prep_new, aes(fill = total), color = "white", size = 0.5) +  
-    scale_fill_si(palette = "denims", 
-                  discrete = FALSE, 
-                  na.value = grey10k) +
-    facet_wrap(period_type~indicator) 
+    geom_sf(data = prep_new_psnu_geo, aes(fill = log(total)), color = "white", size = 0.5) +
+    scale_fill_viridis_c(option = "D", direction = -1) +
+    facet_wrap(~period_type) 
   
   
+  #Admin 1 with labels
+  adm1_labels <- left_join(spdf_reg_zmb, 
+                           genie %>% distinct(snu1, snu1uid), 
+                           by = c("uid" = "snu1uid")) %>% 
+    mutate(province = str_remove_all(snu1, " Province")) %>% 
+    mutate(
+      CENTROID = map(geometry, st_centroid),
+      COORDS = map(CENTROID, st_coordinates),
+      COORDS_X = map_dbl(COORDS, 1),
+      COORDS_Y = map_dbl(COORDS, 2)
+    )
+  
+  achievement_map <- 
+  terr_map +
+    geom_sf(data = prep_new_psnu_geo %>% filter(period_type == "cumulative"), 
+            aes(fill = achievement), color = "white", size = 0.5) +
+    geom_sf(data = spdf_ou_zmb, color = grey90k, size = 0.75, fill = NA) +
+    geom_sf(data = spdf_reg_zmb, color = grey90k, size = 0.6, fill = NA) +
+    ggrepel::geom_label_repel(data = adm1_labels, 
+                  aes(label = province,
+                      x = COORDS_X,
+                      y = COORDS_Y,), 
+                  fill = alpha(c("white"), 0.75),
+                  force = 6,
+                  label.size = NA,
+                  label.padding = 0.25,
+                  family = "Source Sans Pro Light") +
+    scale_fill_si(palette = "genoas", discrete = FALSE, 
+                  alpha = 0.75,
+                  na.value = grey20k,
+                  limits = c(0, 1),
+                  labels = percent,
+                  oob = scales::oob_squish) +
+    si_style_map()
+  achievement_map
+  
+  si_save(here(images, "ZMB_PrEP_NEW_achievement_map.png"), plot = achievement_map, scale = 1.25)
   
   
+  library(patchwork)
+  achievement_map / prep_new_psnu_bar
   
   
-  
-    
-    
-
-      
-      
-
-  
-  
-    
-    
-  
-
-
-
-  
-
 # SPINDOWN ============================================================================
 
 

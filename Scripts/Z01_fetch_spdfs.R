@@ -64,11 +64,26 @@
   spdf_comm_zmb <- get_spdf("community")
   spdf_ou_zmb <- get_spdf("country_lvl")
 
-  spdf_reg_zmb <- 
-    spdf_pepfar %>% 
-    dplyr::filter(uid %in% reg_ids)
-  
-  facility_points <- 
+    prov_cw <- tibble::tribble(
+         ~province,          ~uid,
+         "Western", "ZP7sUNCemnF",
+         "Central", "glHv5VLHKi0",
+        "Northern", "IJ4fAvJ0HJf",
+         "Eastern", "KL9KJYtIrPo",
+         "Luapula", "Vx5hU3RgmjC",
+          "Lusaka", "fKHv5qcp1nN",
+      "Copperbelt", "ujvP4QAHDoM",
+        "Muchinga", "QPIMzDJei82",
+        "Southern", "ecXXey5nCpd",
+    "NorthWestern", "LuBA2MsPgGd",
+        "Military", "y0cygdhumHI"
+    )
+
+    spdf_reg_zmb <- 
+      spdf_pepfar %>% 
+      dplyr::filter(uid %in% reg_ids) %>%
+      left_join(., prov_cw)
+   
     df_locs %>% 
     gisr::extract_facilities()
   

@@ -434,6 +434,9 @@
       ungroup() %>% 
       mutate(achievement = total/targets_sort) 
   
+  # Check distribution of metric being mapped
+    summary(prep_new_psnu_geo$total)  
+    hist(prep_new_psnu_geo$total %>% log())
     
   # There are quite a few psnus that do not have targets
   terr_map +
@@ -452,7 +455,84 @@
   
   si_save(here(images, "ZMB_PrEP_NEW_results to Targets.png"))
   
-  summary(prep_new_psnu_geo$total)
+  # Investigate maps by province, rolling up indicators to this level
+    prep_new_prov <- 
+      prep_new_psnu_geo %>% 
+      st_drop_geometry() %>% 
+      group_by(snu1, period_type) %>% 
+      summarise(total = sum(total, na.rm = TRUE),
+                targets_sort = sum(targets_sort, na.rm = T)) %>% 
+      ungroup()
+    
+    prep_new_prov_geo <- 
+      spdf_reg_zmb %>% 
+      left_join(., prep_new_prov, by = c("province" = "snu1")) %>% 
+      filter(!is.na(period_type)) %>% 
+      mutate(achievement = if_else(period_type == "cumulative", 
+                                   total / targets_sort, NA_real_),
+             period_type = if_else(period_type == "cumulative", "FY21 results", "FY21 targets"),
+             text_color = case_when(
+               province %in% c("Copperbelt", "Lusaka", "Southern", "Central") & period_type == "FY21 targets" ~ "#FFFFFF",
+               TRUE ~ grey90k
+             ))
+      
+      
+    terr_map +
+      geom_sf(data = prep_new_prov_geo, 
+              aes(fill = total), color = "white", size = 0.25, alpha = 0.75) +
+      geom_sf_text(data = prep_new_prov_geo, 
+                   aes(label = case_when(
+        period_type == "FY21 results" ~ paste0(province, "\n", comma(total, 1), " (", percent(achievement, 1), ")"),
+        period_type == "FY21 targets" ~ paste0(comma(total, 1))),
+        color = text_color),
+        family = "Source Sans Pro Regular") +
+      scale_fill_viridis_c(option = "D", direction = -1, alpha = 0.85, 
+                           trans = "log",
+                           breaks = c(500, 1000, 2500, 5000, 10000, 20000),
+                           labels = comma(c(500, 1000, 2500, 5000, 10000, 20000))
+      ) +
+      facet_wrap(~period_type, drop = T) +
+      scale_color_identity() + 
+      si_style_map()
+  
+  si_save(here(images, "ZMB_PrEP_NEW_Province_results_FY21Q1.png"), scale = 1.33)
+  
+  # Grab min and max to make sure colors are represented the same way in bar and map
+    max <- max(prep_new_prov_geo$total)
+    min <- min(prep_new_prov_geo$total)
+  
+  # Bar graph
+  prep_new_prov_geo %>% 
+    st_drop_geometry() %>% 
+    select(-c(text_color, targets_sort, achievement)) %>% 
+    spread(period_type, total) %>% 
+    mutate(prov_order = fct_reorder(province, `FY21 results`),
+           achievement = `FY21 results` / `FY21 targets`) %>% 
+      ggplot(aes(y = prov_order)) +
+      geom_col(aes(x = `FY21 targets`), fill = grey10k) +
+      geom_col(aes(x = `FY21 results`, fill = `FY21 results`)) +
+    geom_text(aes(x = `FY21 results`, label = percent(achievement,1)), hjust = -0.1,
+              family = "Source Sans Pro Light") +
+      si_style_xgrid() +
+    scale_x_continuous(labels = comma) +
+    scale_fill_viridis_c(option = "D", direction = -1, alpha = 0.75, 
+                         trans = "log",
+                         limits = c(min, max)
+                         ) +
+    labs(x = NULL, y = NULL) +
+    theme(legend.position = "none")
+
+    si_save(here(images, "ZMB_PrEP_NEW_Province_results_FY21Q1_bar.png"),
+            scale = 1.33,
+            height = 4.63,
+            width = 4.63)
+  
+  
+  
+  
+  
+  
+  
   
   # How would a heatmap look to completment the two maps. Maybe faceted by provinces?
 

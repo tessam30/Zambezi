@@ -340,13 +340,24 @@
 # VIZ ============================================================================
   
   #Crate a map showing PrEP_NEW coverage as of Q1 FY21 for results and show targets on right
-  prep_new_21 <- 
-    prep_geo %>% 
+  prep_new <- 
+    prep %>% 
     filter(indicator == "PrEP_NEW") %>% 
-    group_by(period_type, period, indicator, uid, psnu, snu1) %>% 
+    group_by(period_type, period, indicator, psnuuid, psnu, snu1) %>% 
     summarise(total = sum(val, na.rm = TRUE)) %>% 
     ungroup() %>% 
     filter(str_detect(period, "FY21"), period_type != "results")
+  
+  
+  prep_new_21 <- 
+    spdf_comm_zmb %>% 
+    full_join(., prep_new, by = c("uid" = "psnuuid")) %>% 
+    select(-contains(".y")) %>% 
+    rename_if(endsWith(names(.), ".x"), ~str_remove_all(., ".x"))
+  
+  
+  prep_new %>% filter(snu1 == "NorthWestern Province") %>% distinct(psnuuid, psnu)
+  spdf_comm_zmb %>% filter(snu1 == "NorthWestern") %>% st_drop_geometry() %>% distinct(uid, psnu)
   
   # Let's break this out into two layers with different color codings for each
   prep_new_psnu <- 
@@ -426,9 +437,56 @@
     
   # There are quite a few psnus that do not have targets
   terr_map +
-    geom_sf(data = prep_new_psnu_geo, aes(fill = log(total)), color = "white", size = 0.5) +
-    scale_fill_viridis_c(option = "D", direction = -1) +
-    facet_wrap(~period_type) 
+    geom_sf(data = prep_new_psnu_geo %>% filter(!is.na(total)) %>% 
+              mutate(period_type = if_else(period_type == "cumulative", "FY21 results", "FY21 targets")),
+            aes(fill = total), color = "white", size = 0.25) +
+    geom_sf(data = spdf_reg_zmb, color = "white", size = 1, fill = NA) +
+    geom_sf(data = spdf_reg_zmb, color = grey80k, size = 0.6, fill = NA) +
+    geom_sf(data = spdf_ou_zmb, color = grey90k, size = 0.75, fill = NA) +
+    scale_fill_viridis_c(option = "D", direction = -1, alpha = 0.85, 
+                         trans = "log",
+                         breaks = c(1, 10, 100, 1000, 10000)
+                         ) +
+    facet_wrap(~period_type, drop = T) +
+    si_style_map()
+  
+  si_save(here(images, "ZMB_PrEP_NEW_results to Targets.png"))
+  
+  summary(prep_new_psnu_geo$total)
+  
+  # How would a heatmap look to completment the two maps. Maybe faceted by provinces?
+
+    prep_new_psnu_geo %>% 
+      filter(period_type == "cumulative", !is.na(achievement)) %>% 
+      mutate(psnu_order = reorder_within(psnu, achievement, snu1)) %>% 
+      ggplot(aes(y = indicator, x = psnu_order, fill = achievement)) +
+      geom_tile(color = "white", size = 0.25) +
+      geom_text(aes(label = percent(achievement, 1))) +
+      facet_wrap(~ indicator, nrow = 2) +
+      scale_fill_si(palette = "genoas", discrete = FALSE, 
+                    alpha = 0.75,
+                    na.value = grey20k,
+                    limits = c(0, 1),
+                    labels = percent,
+                    oob = scales::oob_squish) +
+      si_style_nolines() +
+      scale_x_reordered() +
+      scale_y_discrete(position = "top") +
+      theme(strip.text = element_blank(),
+            axis.title = element_blank(),
+            axis.text.x = element_text(angle = 90),
+            legend.position = "none") 
+
+provs <- prep_new_psnu_geo %>% st_drop_geometry() %>% distinct(snu1) %>% pull(snu1) %>% as.list()
+  hm <- map(provs, ~heat_strip(.x))
+  layout <- "
+              AABBCCDDEE
+              FFGGHHIIJJ
+              "
+  reduce(hm, `|` ) + plot_layout(design = layout)
+    
+    
+  
   
   
   #Admin 1 with labels

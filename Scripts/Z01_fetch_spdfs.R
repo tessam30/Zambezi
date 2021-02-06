@@ -52,7 +52,13 @@
   df_lvls <- glamr::identify_levels(datim_user(), datim_pwd()) 
   
   # Orgs & Printing out Zambia output for quick review
-  df_locs <- gisr::extract_locations(country, datim_user(), datim_pwd())
+  df_locs <- gisr::extract_locations(
+    country,
+    level = NULL,
+    add_geom = TRUE,
+    username = NULL,
+    password = NULL
+  )
   df_lvls %>% dplyr::filter(countryname == "Zambia")
   
   # Region/Province IDS live df_locs dataframe under level 4 (not in df_lvls)
@@ -89,8 +95,7 @@
   
   # Get a terrain map for Zambia
   terr_map <- gisr::terrain_map(country, adm1 = spdf_reg_zmb,
-                          adm0 = spdf_ou_zmb,
-                          terr_path = rasdata)
+                          adm0 = spdf_ou_zmb)
   
   # Add in snu1 and psnu names to spdf_Comm_zmb for fuzzy joins
   # Latest MSD PSNU x IM File - Curr release

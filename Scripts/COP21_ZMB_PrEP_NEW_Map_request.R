@@ -339,57 +339,6 @@
    
 # VIZ ============================================================================
   
-  # Basemap
-  return_province <- function(df, province) {
-    
-    df <- df %>%  mutate(prov_color = case_when(
-      snu1 == "NorthWestern" ~ denim,
-      snu1 == "Southern" ~ old_rose,
-      snu1 == "Western" ~ moody_blue,
-      snu1 == "Luapula" ~ burnt_sienna,
-      snu1 == "Lusaka" ~ scooter,
-      snu1 == "Central" ~ genoa,
-      snu1 == "Eastern" ~ moody_blue_light,
-      snu1 == "Copperbelt" ~ golden_sand,
-      snu1 == "Muchinga" ~ trolley_grey,
-      snu1 == "Northern" ~ burnt_sienna_light)
-    )
-    
-    geo_df <- df %>% filter(snu1 == {{province}})
-    mapRange <- c(range(st_coordinates(geo_df)[, 1]), range(st_coordinates(geo_df)[, 2]))
-    
-    terr_map +
-      geom_sf(data = geo_df, aes(fill = prov_color), colour = "white", size = 0.25, alpha = 0.6) +
-      geom_sf_text(data = geo_df, aes(label = psnu),
-                   family = "Source Sans Pro Light") +
-      geom_sf(data = spdf_reg_zmb %>% filter(province == province), fill = NA, color = grey80k, size = 0.5) +
-      scale_fill_identity() +
-      facet_wrap(~str_to_upper(snu1) %>% paste0(., "\n")) +
-      coord_sf(xlim = mapRange[c(1:2)], ylim = mapRange[c(3:4)]) +
-      si_style_map() +
-      theme(strip.text=element_text(hjust = 0, size = 10))
-    
-    si_save(here(images, paste0("basemap_of_", {{province}}, "_province")))
-    }
- 
-  provs <- spdf_comm_zmb %>% st_drop_geometry() %>% distinct(snu1) %>% pull(snu1) %>% as.list()
-  map(provs, ~return_province(spdf_comm_zmb, .x))
-
-  
-     
-  return_province(spdf_comm_zmb, "Central")
-  
-  
-    si_save(here(images, "ZMB_basemap_district_labelled.png"), scale = 1.33)
-  
-  
-  
- terr_map + geom_sf(data = spdf_comm_zmb %>% filter(snu1 == "Central"))
-  
-  
-  
-  
-  
   #Crate a map showing PrEP_NEW coverage as of Q1 FY21 for results and show targets on right
   prep_new <- 
     prep %>% 
@@ -669,6 +618,52 @@
 
 # EXTRA -------------------------------------------------------------------
 
+  # This will create a set of province maps that shows the districts. 
+  # Idea is that these can be supplemental to provincal focused analyses as needed.
+  # Basemap
+  return_province <- function(df, province) {
+    
+    df <- df %>%  mutate(prov_color = case_when(
+      snu1 == "NorthWestern" ~ denim,
+      snu1 == "Southern" ~ old_rose,
+      snu1 == "Western" ~ moody_blue,
+      snu1 == "Luapula" ~ burnt_sienna,
+      snu1 == "Lusaka" ~ scooter,
+      snu1 == "Central" ~ genoa,
+      snu1 == "Eastern" ~ moody_blue_light,
+      snu1 == "Copperbelt" ~ golden_sand,
+      snu1 == "Muchinga" ~ trolley_grey,
+      snu1 == "Northern" ~ burnt_sienna_light)
+    )
+    
+    geo_df <- df %>% filter(snu1 == {{province}})
+    mapRange <- c(range(st_coordinates(geo_df)[, 1]), range(st_coordinates(geo_df)[, 2]))
+    
+    terr_map +
+      geom_sf(data = geo_df, aes(fill = prov_color), colour = "white", size = 0.25, alpha = 0.6) +
+      geom_sf_text(data = geo_df, aes(label = psnu),
+                   family = "Source Sans Pro Light") +
+      geom_sf(data = spdf_reg_zmb %>% filter(province == province), fill = NA, color = grey80k, size = 0.5) +
+      scale_fill_identity() +
+      facet_wrap(~str_to_upper(snu1) %>% paste0(., "\n")) +
+      coord_sf(xlim = mapRange[c(1:2)], ylim = mapRange[c(3:4)]) +
+      si_style_map() +
+      theme(strip.text=element_text(hjust = 0, size = 10))
+    
+    si_save(here(images, paste0("basemap_of_", {{province}}, "_province")))
+  }
+  
+  provs <- spdf_comm_zmb %>% st_drop_geometry() %>% distinct(snu1) %>% pull(snu1) %>% as.list()
+  map(provs, ~return_province(spdf_comm_zmb, .x))
+  
+  return_province(spdf_comm_zmb, "Central")
+  
+  
+  si_save(here(images, "ZMB_basemap_district_labelled.png"), scale = 1.33)
+  
+  
+  # playing around with Patchwork
+  
   prep_new_psnu_geo %>% 
     filter(period_type == "cumulative", !is.na(achievement)) %>% 
     mutate(psnu_order = reorder_within(psnu, achievement, snu1)) %>% 

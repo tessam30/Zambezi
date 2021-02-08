@@ -339,6 +339,57 @@
    
 # VIZ ============================================================================
   
+  # Basemap
+  return_province <- function(df, province) {
+    
+    df <- df %>%  mutate(prov_color = case_when(
+      snu1 == "NorthWestern" ~ denim,
+      snu1 == "Southern" ~ old_rose,
+      snu1 == "Western" ~ moody_blue,
+      snu1 == "Luapula" ~ burnt_sienna,
+      snu1 == "Lusaka" ~ scooter,
+      snu1 == "Central" ~ genoa,
+      snu1 == "Eastern" ~ moody_blue_light,
+      snu1 == "Copperbelt" ~ golden_sand,
+      snu1 == "Muchinga" ~ trolley_grey,
+      snu1 == "Northern" ~ burnt_sienna_light)
+    )
+    
+    geo_df <- df %>% filter(snu1 == {{province}})
+    mapRange <- c(range(st_coordinates(geo_df)[, 1]), range(st_coordinates(geo_df)[, 2]))
+    
+    terr_map +
+      geom_sf(data = geo_df, aes(fill = prov_color), colour = "white", size = 0.25, alpha = 0.6) +
+      geom_sf_text(data = geo_df, aes(label = psnu),
+                   family = "Source Sans Pro Light") +
+      geom_sf(data = spdf_reg_zmb %>% filter(province == province), fill = NA, color = grey80k, size = 0.5) +
+      scale_fill_identity() +
+      facet_wrap(~str_to_upper(snu1) %>% paste0(., "\n")) +
+      coord_sf(xlim = mapRange[c(1:2)], ylim = mapRange[c(3:4)]) +
+      si_style_map() +
+      theme(strip.text=element_text(hjust = 0, size = 10))
+    
+    si_save(here(images, paste0("basemap_of_", {{province}}, "_province")))
+    }
+ 
+  provs <- spdf_comm_zmb %>% st_drop_geometry() %>% distinct(snu1) %>% pull(snu1) %>% as.list()
+  map(provs, ~return_province(spdf_comm_zmb, .x))
+
+  
+     
+  return_province(spdf_comm_zmb, "Central")
+  
+  
+    si_save(here(images, "ZMB_basemap_district_labelled.png"), scale = 1.33)
+  
+  
+  
+ terr_map + geom_sf(data = spdf_comm_zmb %>% filter(snu1 == "Central"))
+  
+  
+  
+  
+  
   #Crate a map showing PrEP_NEW coverage as of Q1 FY21 for results and show targets on right
   prep_new <- 
     prep %>% 
@@ -367,29 +418,43 @@
     group_by(psnu) %>% 
     fill(., targets_sort, .direction = "updown") %>% 
     mutate(group_count = n()) %>% 
-    filter(period_type != "targets", !is.na(psnu)) %>%  
+    filter(period_type != "targets", !is.na(psnu)) %>% 
     ungroup() %>% 
     mutate(targets_sort = if_else(is.na(targets_sort), total, targets_sort),
            district_order = reorder_within(psnu, targets_sort, within = snu1),
-           dot_color = if_else(total < targets_sort, genoa_light, genoa),
+           dot_color = if_else(total > targets_sort & group_count == 2, genoa, genoa_light),
            target_line = if_else(total > targets_sort, "white", "NA"),
-           achievement = if_else(total > targets_sort, genoa, genoa_light)) 
+           achievement = if_else(total > targets_sort & group_count == 2, genoa, genoa_light),
+           line_color = if_else(total > targets_sort, genoa_light, trolley_grey_light))
   
   # Dot Plot
     ggplot(data = prep_new_psnu) +
+      geom_vline(xintercept = 0, color = grey50k)+
     geom_segment(aes(x = total, xend = targets_sort, y = district_order, yend = district_order), 
-                 color = trolley_grey_light) +
+                 size = 3, color = trolley_grey_light) +
     geom_point(aes(x = targets_sort, y = district_order),
-               shape = 21, color = trolley_grey, size = 3, fill = trolley_grey_light) +
+               shape = 21, size = 3, fill = moody_blue_light, color = trolley_grey) +
     geom_point(aes(x = total, y = district_order, fill = dot_color),
                shape = 21, size = 3, color = trolley_grey) +
     scale_fill_identity() +
+    scale_color_identity() +
     si_style_xgrid() +
-    facet_wrap(~snu1, scales = "free", nrow = 2) +
+    facet_wrap(~snu1, scales = "free", ncol = 2) +
     scale_y_reordered() +
-    labs(x = NULL, y = NULL, title = "PrEP_NEW Results to Targets for FY21")
+    labs(x = NULL, y = NULL, title = "PrEP_NEW Results to Targets for FY21")+
+      theme(
+        panel.spacing.x = unit(0.05, "cm"),
+        panel.spacing.y = unit(0.05, "cm"),
+      )
+    
+    si_save(here(images, "ZMB_PrEP_NEW_psnu_achievement_dot_connected.png"),
+            scale = 1.75, dpi = "retina",
+            plot = prep_new_psnu_bar,
+            height = 5.63,
+            width = 4.63)    
+    
   
-  # Bar graph rotated
+  # Bar graph rotated showing PrEP_NEW results by district sorted by province
   prep_new_psnu_bar <- 
     ggplot(data = prep_new_psnu) +
       geom_col(aes(x = targets_sort, y = district_order), fill = grey10k,
@@ -400,8 +465,7 @@
                         xmax = targets_sort,
                         y = district_order,
                         colour = target_line),
-                    size = 0.5,
-                    linetype = "dashed") +
+                    size = 0.5) +
       geom_vline(xintercept = 0, color = grey70k, size = 0.5)+
       scale_color_identity() +
       scale_fill_identity() +
@@ -442,10 +506,10 @@
   terr_map +
     geom_sf(data = prep_new_psnu_geo %>% filter(!is.na(total)) %>% 
               mutate(period_type = if_else(period_type == "cumulative", "FY21 results", "FY21 targets")),
-            aes(fill = total), color = "white", size = 0.25) +
-    geom_sf(data = spdf_reg_zmb, color = "white", size = 1, fill = NA) +
-    geom_sf(data = spdf_reg_zmb, color = grey80k, size = 0.6, fill = NA) +
-    geom_sf(data = spdf_ou_zmb, color = grey90k, size = 0.75, fill = NA) +
+            aes(fill = total), color = grey10k, size = 0.25, alpha = 0.75) +
+    geom_sf(data = spdf_reg_zmb, color = "white", size = 0.75, fill = NA) +
+    geom_sf(data = spdf_reg_zmb, color = grey80k, size = 0.35, fill = NA) +
+    geom_sf(data = spdf_ou_zmb, color = grey80k, size = 0.5, fill = NA) +
     scale_fill_viridis_c(option = "D", direction = -1, alpha = 0.85, 
                          trans = "log",
                          breaks = c(1, 10, 100, 1000, 10000)
@@ -526,48 +590,7 @@
             scale = 1.33,
             height = 4.63,
             width = 4.63)
-  
-  
-  
-  
-  
-  
-  
-  
-  # How would a heatmap look to completment the two maps. Maybe faceted by provinces?
 
-    prep_new_psnu_geo %>% 
-      filter(period_type == "cumulative", !is.na(achievement)) %>% 
-      mutate(psnu_order = reorder_within(psnu, achievement, snu1)) %>% 
-      ggplot(aes(y = indicator, x = psnu_order, fill = achievement)) +
-      geom_tile(color = "white", size = 0.25) +
-      geom_text(aes(label = percent(achievement, 1))) +
-      facet_wrap(~ indicator, nrow = 2) +
-      scale_fill_si(palette = "genoas", discrete = FALSE, 
-                    alpha = 0.75,
-                    na.value = grey20k,
-                    limits = c(0, 1),
-                    labels = percent,
-                    oob = scales::oob_squish) +
-      si_style_nolines() +
-      scale_x_reordered() +
-      scale_y_discrete(position = "top") +
-      theme(strip.text = element_blank(),
-            axis.title = element_blank(),
-            axis.text.x = element_text(angle = 90),
-            legend.position = "none") 
-
-provs <- prep_new_psnu_geo %>% st_drop_geometry() %>% distinct(snu1) %>% pull(snu1) %>% as.list()
-  hm <- map(provs, ~heat_strip(.x))
-  layout <- "
-              AABBCCDDEE
-              FFGGHHIIJJ
-              "
-  reduce(hm, `|` ) + plot_layout(design = layout)
-    
-    
-  
-  
   
   #Admin 1 with labels
   adm1_labels <- left_join(spdf_reg_zmb, 
@@ -585,8 +608,8 @@ provs <- prep_new_psnu_geo %>% st_drop_geometry() %>% distinct(snu1) %>% pull(sn
   terr_map +
     geom_sf(data = prep_new_psnu_geo %>% filter(period_type == "cumulative"), 
             aes(fill = achievement), color = "white", size = 0.5) +
-    geom_sf(data = spdf_ou_zmb, color = grey90k, size = 0.75, fill = NA) +
-    geom_sf(data = spdf_reg_zmb, color = grey90k, size = 0.6, fill = NA) +
+    geom_sf(data = spdf_ou_zmb, color = grey20k, size = 0.5, fill = NA) +
+    geom_sf(data = spdf_reg_zmb, color = grey60k, size = 0.6, fill = NA) +
     ggrepel::geom_label_repel(data = adm1_labels, 
                   aes(label = province,
                       x = COORDS_X,
@@ -598,7 +621,7 @@ provs <- prep_new_psnu_geo %>% st_drop_geometry() %>% distinct(snu1) %>% pull(sn
                   family = "Source Sans Pro Light") +
     scale_fill_si(palette = "genoas", discrete = FALSE, 
                   alpha = 0.75,
-                  na.value = grey20k,
+                  na.value = grey10k,
                   limits = c(0, 1),
                   labels = percent,
                   oob = scales::oob_squish) +
@@ -608,10 +631,70 @@ provs <- prep_new_psnu_geo %>% st_drop_geometry() %>% distinct(snu1) %>% pull(sn
   si_save(here(images, "ZMB_PrEP_NEW_achievement_map.png"), plot = achievement_map, scale = 1.25)
   
   
+  prep_new_prov_geo %>% 
+    st_drop_geometry() %>% 
+    filter(period_type == "FY21 results") %>% 
+    mutate(prov_order = fct_reorder(province, achievement, .desc = T)) %>% 
+    mutate(label_text = percent(achievement, 1),
+           ach_ymax = 1,
+           ach_inv = 1 - achievement) %>% 
+    mutate_at(vars(starts_with("ach")), rescale, to=pi*c(-.5,.5), from = 0:1) %>% 
+    ggplot + 
+    geom_arc_bar(aes(x0 = 0, y0 = 0, r0 = .5, r = 1, start = -pi/2, end = pi/2),
+                 fill = genoa, color = grey10k, alpha = 0.75) + 
+    geom_arc_bar(aes(x0 = 0, y0 = 0, r0 = .5, r = 1, start = achievement, end = ach_ymax),
+                 fill = trolley_grey_light, color = grey10k) + 
+    geom_text(aes(x = 0, y = 0.15, label = label_text),
+              family = "Source Sans Pro SemiBold", 
+              color = color_plot_text, size = 4) +
+    coord_fixed() +
+    facet_wrap(~prov_order, ncol = 2) +
+    si_style_map() +
+    theme(strip.text = element_text(size = 12))
+  
+  si_save(here(images, "ZMB_PrEP_NEW_Province_results_FY21Q1_donut.png"),
+          scale = 1.25,
+          height = 4.63,
+          width = 4.63)
+  
+  
+  
   library(patchwork)
   achievement_map / prep_new_psnu_bar
   
   
 # SPINDOWN ============================================================================
 
+  
 
+# EXTRA -------------------------------------------------------------------
+
+  prep_new_psnu_geo %>% 
+    filter(period_type == "cumulative", !is.na(achievement)) %>% 
+    mutate(psnu_order = reorder_within(psnu, achievement, snu1)) %>% 
+    ggplot(aes(y = indicator, x = psnu_order, fill = achievement)) +
+    geom_tile(color = "white", size = 0.25) +
+    geom_text(aes(label = percent(achievement, 1))) +
+    facet_wrap(~ indicator, nrow = 2) +
+    scale_fill_si(palette = "genoas", discrete = FALSE, 
+                  alpha = 0.75,
+                  na.value = grey20k,
+                  limits = c(0, 1),
+                  labels = percent,
+                  oob = scales::oob_squish) +
+    si_style_nolines() +
+    scale_x_reordered() +
+    scale_y_discrete(position = "top") +
+    theme(strip.text = element_blank(),
+          axis.title = element_blank(),
+          axis.text.x = element_text(angle = 90),
+          legend.position = "none") 
+  
+  provs <- prep_new_psnu_geo %>% st_drop_geometry() %>% distinct(snu1) %>% pull(snu1) %>% as.list()
+  hm <- map(provs, ~heat_strip(.x))
+  layout <- "
+              AABBCCDDEE
+              FFGGHHIIJJ
+              "
+  reduce(hm, `|` ) + plot_layout(design = layout)
+  

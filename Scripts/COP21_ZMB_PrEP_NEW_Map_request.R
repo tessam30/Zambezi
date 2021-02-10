@@ -230,26 +230,29 @@
       strip.text = element_text(hjust = 0.5, color = trolley_grey),
       axis.text.y = element_blank(),
       axis.text.x = element_text(size = 9, color = trolley_grey),
-      # plot.title = element_markdown(family = "Source Sans Pro Regular", size = 14),
-      # plot.subtitle = element_markdown(size = 12, family = "Source Sans Pro"),
-      # text = element_text(family = "Source Sans Pro"),
-      panel.spacing.x = unit(0.15, "cm"),
-      
+      plot.title = element_markdown(family = "Arial", size = 14),
+      plot.subtitle = element_markdown(size = 12, family = "Arial"),
+      text = element_text(family = "Source Sans Pro"),
+      panel.spacing.x = unit(0.15, "cm")
     ) +
-    labs(x = NULL, y = NULL)
+    labs(x = NULL, y = NULL, 
+    title = "PrEP_CURR <span style = 'color:#287c6f;'>**RESULTS**</span> AND
+              <span style = 'color:#808080;'>**TARGETS**</span> BY AGE BANDS FOR USAID",
+              caption = "Source: Genie pull as of 2020-02-04",
+              subtitle = "White dotted lines represent targets")
     
-    # , title = "PrEP_CURR <span style = 'color:#287c6f;'>**RESULTS**</span> AND 
-    #      <span style = 'color:#808080;'>**TARGETS**</span> BY AGE BANDS FOR USAID",
-    #      caption = "Source: Genie pull as of 2020-02-04",
-    #      subtitle = "White dotted lines represent targets")
+
   
   si_save(here(images, "ZMB_PrEP_CURR_disaggs_summary.png"),
           scale = 1.25, dpi = "retina")
+  
+  write_csv(prep_curr_disag_all, here(cop_out, "ZMB_PrEP_CURR_disagg_summary_graphic.csv"))
   
   prep_curr_disag_all %>% 
     filter(!disags %in% c("MSM", "FSW")) %>% 
     group_by(period) %>% 
     summarise(total = sum(results, na.rm = TRUE))
+  
   
   
 # ------------------------------------------------------------------------------  
@@ -260,7 +263,7 @@
     #select(-period_combo) %>% 
     #spread(period_type, total) %>% 
     mutate(Achievement = results / targets,
-           dotted_line = if_else(Achievement > 1, "white", trolley_grey_light)) %>% View()
+           dotted_line = if_else(Achievement > 1, "white", trolley_grey_light)) %>% 
     ggplot(aes(x = period)) + 
     geom_col(aes(y = targets), fill = trolley_grey_light) +
     geom_col(aes(y = results), 
@@ -289,10 +292,10 @@
       strip.text = element_text(hjust = 0.5, color = trolley_grey),
       axis.text.y = element_blank(),
       axis.text.x = element_text(size = 9, color = trolley_grey),
-      plot.title = element_markdown(family = "Source Sans Pro Regular", size = 14),
-      plot.subtitle = element_markdown(size = 12, family = "Source Sans Pro"),
-      text = element_text(family = "Source Sans Pro"),
+      plot.title = element_markdown(family = "Arial", size = 14),
+      plot.subtitle = element_markdown(size = 12, family = "Arial"),
       panel.spacing.x = unit(0.15, "cm"),
+      text = element_text(family = "Arial")
     ) +
     labs(x = NULL, y = NULL,
     title = "PrEP_NEW <span style = 'color:#287c6f;'>**RESULTS**</span> AND
@@ -302,6 +305,8 @@
          
   si_save(here(images, "ZMB_PrEP_NEW_disaggs_summary.png"),
           scale = 1.25, dpi = "retina")
+  
+  write_csv(prep_new_disag_all, here(cop_out, "ZMB_PrEP_NEW_disagg_summary_graphic.csv"))
   
   # Checking disaggs to make sure they add up
   prep_new_disag_all %>% 

@@ -95,7 +95,7 @@
   
   # Get a terrain map for Zambia
   terr_map <- gisr::terrain_map(country, adm1 = spdf_reg_zmb,
-                          adm0 = spdf_ou_zmb)
+                          adm0 = spdf_ou_zmb, terr = rasdata, mask = T)
   
   # Add in snu1 and psnu names to spdf_Comm_zmb for fuzzy joins
   # Latest MSD PSNU x IM File - Curr release

@@ -92,10 +92,11 @@
 
   df_vl_wide <- 
     df_vl %>% 
-    select(period, mech_name, TX_CURR, TX_PVLS, TX_PVLS_D, VLC, VLS, notcovered) %>% 
+      mutate(VLS_of_VLC = (TX_PVLS / TX_PVLS_D)) %>% 
+    select(period, mech_name, TX_CURR, TX_PVLS, TX_PVLS_D, VLC, VLS, VLS_of_VLC, notcovered) %>%
     pivot_longer(cols = -(1:2),
                  names_to = "indicators",
-                 values_to = "value") %>% 
+                 values_to = "value")%>% 
     pivot_wider(names_from = period,
                 values_from = value) %>% 
     mutate(indicators = if_else(indicators == "notcovered", "not covered", indicators),
@@ -123,7 +124,7 @@
        style = cell_fill(color = old_rose, alpha = 0.25),
        locations = cells_body(
          columns = vars(`Q1 delta`),
-         rows = `Q1 delta` < 0 & indicators != "not covered"
+         rows = `Q1 delta` < 0.21 & !indicators %in% c("not covered", "VLS_of_VLC")
        )
      )
     

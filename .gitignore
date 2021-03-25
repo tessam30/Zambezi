@@ -46,6 +46,25 @@ Dataout/*
 Images/*
 Graphics/*
 BOBs/
+AI/*
+
+#no data
+*.csv
+*.txt
+*.rds
+*.xlsx
+*.xls
+*.zip
+*.png
+*.twbx
+*.pptx
+*.ai
+
+#nothing from these folders
+GIS/*
+Images/*
+Graphics/*
+Documents/*
 
 #no data
 *.csv
@@ -59,7 +78,7 @@ BOBs/
 *.pptx
 
 #nothing from these folders
+AI/*
 GIS/*
 Images/*
 Graphics/*
-Documents/*

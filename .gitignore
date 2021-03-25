@@ -46,7 +46,8 @@ Dataout/*
 Images/*
 Graphics/*
 BOBs/
-AI/*
+*Adobe
+
 
 #no data
 *.csv
@@ -78,6 +79,7 @@ Documents/*
 *.pptx
 
 #nothing from these folders
+Adobe/*
 AI/*
 GIS/*
 Images/*

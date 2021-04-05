@@ -20,15 +20,14 @@
   library(googlesheets4)
   library(readxl)
   
-  data <- "Data"
-  
   # Latest msd
-  file_msd <- return_latest(folderpath = data,
-                            pattern = "PSNU_IM_FY19-21_20210212")
+  file_msd <- return_latest(folderpath = merdata,
+                            pattern = "PSNU_IM_FY19-21_20210319_v2_1_Zambia")
 
 # READ and MUNGE ----------------------------------------------------------
 
   df <- read_msd(file_msd)
+  df %>% count(standardizeddisaggregate) %>% prinf()
 
   df_vl <- 
     df %>% 
@@ -43,7 +42,7 @@
     ungroup() %>% 
     reshape_msd(clean = TRUE) %>% 
     select(-period_type) %>% 
-    spread(indicator, val) %>% 
+    spread(indicator, value) %>% 
     mutate(mech_name = case_when(
       mech_name == "USAID/District Coverage of Health Services (DISCOVER-H)" ~ "DISCOVER-H",
       TRUE ~ mech_name

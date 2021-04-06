@@ -25,8 +25,8 @@
     library(ggnewscale)
     
     source("./Scripts/Z00_Config.R")
-    source("./Scripts/Z01_fetch_spdfs.R")
-    `%nope%` <- Negate(`%in%`)
+    # source("./Scripts/Z01_fetch_spdfs.R")
+    # `%nope%` <- Negate(`%in%`)
     
   
   # Set paths  
@@ -43,12 +43,22 @@
   
   # Grab latest genie extract filtered to only PrEP variables
     genie <- 
-      read_msd(here(copdata, "Genie_PSNU_IM_Zambia_Daily_31c3786f-40c3-4060-a29b-4ee65c9fdc31.txt")) %>% 
+      read_msd(here(copdata, "Genie_PSNU_IM_Zambia_Daily_31c3786f-40c3-4060-a29b-4ee65c9fdc31.txt")) 
+    
+    genie %>% glimpse()
+    genie %>% View()
+    
+    genie <- genie %>% 
       reshape_msd(clean = T)
+    
+    # Inspect rows that need to be filtered and columns to concatenate to produce groupings requested
+    genie %>% 
+      count(indicator, standardizeddisaggregate, otherdisaggregate, sex, ageasentered) %>% 
+      prinf()
 
 # PrEP_CURR SLIDE REPRODUCTION --------------------------------------------
 
-  # Pull out standard disaggs; KeyPop pulled out separately -- they will distort targets and totals
+  # Pull out standard disaggs; KeyPop pulled out separately -- they will distort targets and totals and need to be flagged
   # Oddly, the stddisag is KeyPop for PrEP_CURR and KeyPopAbr for NEW
   
   # Custom request for PrEP 
@@ -59,117 +69,75 @@
   disagg_regroup_f <- c("Age/Sex_Female_25-29", "Age/Sex_Female_30-34",
                         "Age/Sex_Female_35-39", "Age/Sex_Female_40-44",
                         "Age/Sex_Female_45-49", "Age/Sex_Female_50+")
+  
+# MUNGE PREP_CURR ---------------------------------------------------------
+
 
   # PrEP_CURR
-  prep_curr_disag_kp <- 
-    genie %>% 
-      filter(indicator == "PrEP_CURR",
-             standardizeddisaggregate %in% c("KeyPop")) %>%
-      unite(combo, c(standardizeddisaggregate, otherdisaggregate), remove = F) %>% 
-      filter(str_detect(combo, "(FSW|MSM)")) %>% 
-      mutate(disags = case_when(
-        combo == "KeyPop_FSW" ~ "FSW",
-        combo == "KeyPop_MSM" ~ "MSM",
-        TRUE ~ NA_character_
-      ), 
-      core_disag = 0) %>% 
-    mutate(core_disag = 0) %>% 
-    group_by(disags, period, period_type, core_disag) %>% 
-    summarise(total = sum(val, na.rm = TRUE)) %>% 
-    ungroup() %>% 
-    unite(., "period_combo", c(period, period_type), remove = F)
-    # filter(!period_combo %in% c("FY21Q1_results", "FY20Q2_results", "FY20Q4_results"))
-  
-
-  prep_curr_disag <- 
+  prep_curr_disag_all <- 
     genie %>% 
     filter(indicator == "PrEP_CURR",
-           standardizeddisaggregate %in% c("Age/Sex")) %>% 
-    unite(combo, c(standardizeddisaggregate, sex, ageasentered), remove = F) %>%
-      mutate(disags = case_when(
+           standardizeddisaggregate %in% c("Age/Sex", "KeyPop"),
+           is.na(otherdisaggregate) | otherdisaggregate %in% c("FSW", "MSM")
+    ) %>% 
+    unite(combo, c(standardizeddisaggregate, otherdisaggregate, sex, ageasentered), remove = F) %>% 
+    mutate(combo = gsub("_NA", "", x = combo)) %>% 
+    mutate(disags = case_when(
+      combo == "KeyPop_FSW" ~ "FSW",
+      combo == "KeyPop_MSM" ~ "MSM",
       combo == "Age/Sex_Female_15-19" ~ "F 15-19",
       combo == "Age/Sex_Male_15-19" ~ "M 15-19",
       combo == "Age/Sex_Female_20-24" ~ "F 20-24",
       combo == "Age/Sex_Male_20-24" ~ "M 20-24",
       combo %in% disagg_regroup_m ~ "M 25-50+",
       combo %in% disagg_regroup_f ~ "F 25-50+",
-      TRUE ~ combo)
-      ) %>% 
-    mutate(core_disag = 1) %>% 
+      TRUE ~ NA_character_)) %>% 
+    mutate(core_disag = if_else(disags %in% c("FSW", "MSM"), 0, 1),
+           disags = fct_relevel(disags,
+                                "M 15-19", 
+                                "F 15-19",
+                                "M 20-24",
+                                "F 20-24",
+                                "M 25-50+",
+                                "F 25-50+",
+                                "FSW",
+                                "MSM")
+    ) %>%
     group_by(disags, period, period_type, core_disag) %>% 
-    summarise(total = sum(val, na.rm = TRUE)) %>% 
+    summarise(total = sum(value, na.rm = TRUE)) %>% 
     ungroup() %>% 
-    unite(., "period_combo", c(period, period_type), remove = F) 
-    #filter(!period_combo %in% c("FY21Q1_results", "FY20Q2_results", "FY20Q4_results"))
-  
-  prep_curr_disag_all <- 
-    prep_curr_disag %>% 
-    bind_rows(prep_curr_disag_kp) %>% 
-    mutate(disags = fct_relevel(disags,
-                            "M 15-19", 
-                            "F 15-19",
-                            "M 20-24",
-                            "F 20-24",
-                            "M 25-50+",
-                            "F 25-50+",
-                            "FSW",
-                            "MSM")
-           ) %>% 
+    unite(., "period_combo", c(period, period_type), remove = F) %>% 
     filter(period_type != "cumulative") %>% 
     spread(period_type, total) %>% # Set targets to repeat in same row as results
     mutate(fy = str_extract(period, "\\d{2}")) %>% 
     group_by(disags, fy) %>% 
     fill(., targets, .direction ="down") %>% 
     filter(!is.na(results))
+  
 
+# MUNGE PREP_NEW ----------------------------------------------------------
 
-  # prep_curr_disag_all %>% 
-  #   group_by(period_combo, disags) %>% 
-  #   summarise(total = sum(total, na.rm = TRUE))
-
- ### PREP_NEW Graph
-  prep_new_disag_kp <- 
+  
+  prep_new_disag_all <- 
     genie %>% 
     filter(indicator == "PrEP_NEW",
-           standardizeddisaggregate %in% c("KeyPopAbr")) %>%
-    unite(combo, c(standardizeddisaggregate, otherdisaggregate), remove = F) %>% 
-    filter(str_detect(combo, "(FSW|MSM)")) %>% 
+           standardizeddisaggregate %in% c("Age/Sex", "KeyPopAbr"),
+           is.na(otherdisaggregate) | otherdisaggregate %in% c("FSW", "MSM")
+    ) %>% 
+    unite(combo, c(standardizeddisaggregate, otherdisaggregate, sex, ageasentered), remove = F) %>% 
+    mutate(combo = gsub("_NA", "", x = combo)) %>% 
     mutate(disags = case_when(
       combo == "KeyPopAbr_FSW" ~ "FSW",
       combo == "KeyPopAbr_MSM" ~ "MSM",
-      TRUE ~ NA_character_
-    ), 
-    core_disag = 0) %>% 
-    mutate(core_disag = 0) %>% 
-    group_by(disags, period, period_type, core_disag) %>% 
-    summarise(total = sum(val, na.rm = TRUE)) %>% 
-    ungroup() %>% 
-    unite(., "period_combo", c(period, period_type), remove = F)
-  
-  prep_new_disag <- 
-    genie %>% 
-    filter(indicator == "PrEP_NEW",
-           standardizeddisaggregate %in% c("Age/Sex")) %>% 
-    unite(combo, c(standardizeddisaggregate, sex, ageasentered), remove = F) %>%
-    mutate(disags = case_when(
       combo == "Age/Sex_Female_15-19" ~ "F 15-19",
       combo == "Age/Sex_Male_15-19" ~ "M 15-19",
       combo == "Age/Sex_Female_20-24" ~ "F 20-24",
       combo == "Age/Sex_Male_20-24" ~ "M 20-24",
       combo %in% disagg_regroup_m ~ "M 25-50+",
       combo %in% disagg_regroup_f ~ "F 25-50+",
-      TRUE ~ combo)
-    ) %>% 
-    mutate(core_disag = 1) %>% 
-    group_by(disags, period, period_type, core_disag) %>% 
-    summarise(total = sum(val, na.rm = TRUE)) %>% 
-    ungroup() %>% 
-    unite(., "period_combo", c(period, period_type), remove = F) 
-  
-  prep_new_disag_all <- 
-    prep_new_disag %>% 
-    bind_rows(prep_new_disag_kp) %>% 
-    mutate(disags = fct_relevel(disags,
+      TRUE ~ NA_character_)) %>% 
+    mutate(core_disag = if_else(disags %in% c("FSW", "MSM"), 0, 1),
+           disags = fct_relevel(disags,
                                 "M 15-19", 
                                 "F 15-19",
                                 "M 20-24",
@@ -179,13 +147,16 @@
                                 "FSW",
                                 "MSM")
     ) %>% 
+    group_by(disags, period, period_type, core_disag) %>% 
+    summarise(total = sum(value, na.rm = TRUE)) %>% 
+    ungroup() %>% 
+    unite(., "period_combo", c(period, period_type), remove = F) %>% 
     filter(period_type != "cumulative") %>% 
     spread(period_type, total) %>% # Set targets to repeat in same row as results
     mutate(fy = str_extract(period, "\\d{2}")) %>% 
     group_by(disags, fy) %>% 
     fill(., targets, .direction ="down") %>% 
     filter(!is.na(results))
-    
 
 # PrEP VIZ REQUEST -------------------------------------------------------------
 
@@ -263,7 +234,7 @@
     #select(-period_combo) %>% 
     #spread(period_type, total) %>% 
     mutate(Achievement = results / targets,
-           dotted_line = if_else(Achievement > 1, "white", trolley_grey_light)) %>% 
+           dotted_line = if_else(Achievement > 1, "white", trolley_grey_light)) %>%
     ggplot(aes(x = period)) + 
     geom_col(aes(y = targets), fill = trolley_grey_light) +
     geom_col(aes(y = results), 
@@ -698,3 +669,127 @@
               "
   reduce(hm, `|` ) + plot_layout(design = layout)
   
+
+# EXTRA OLD CODE -------------------------------------------------------------------
+
+  #PREP_CURR
+  prep_curr_disag_kp <- 
+    genie %>% 
+    filter(indicator == "PrEP_CURR",
+           standardizeddisaggregate %in% c("KeyPop")) %>%
+    unite(combo, c(standardizeddisaggregate, otherdisaggregate), remove = F) %>% 
+    filter(str_detect(combo, "(FSW|MSM)")) %>% 
+    mutate(disags = case_when(
+      combo == "KeyPop_FSW" ~ "FSW",
+      combo == "KeyPop_MSM" ~ "MSM",
+      TRUE ~ NA_character_
+    ), 
+    core_disag = 0) %>% 
+    group_by(disags, period, period_type, core_disag) %>% 
+    summarise(total = sum(value, na.rm = TRUE)) %>% 
+    ungroup() %>% 
+    unite(., "period_combo", c(period, period_type), remove = F)
+  # filter(!period_combo %in% c("FY21Q1_results", "FY20Q2_results", "FY20Q4_results"))
+  
+  
+  prep_curr_disag <- 
+    genie %>% 
+    filter(indicator == "PrEP_CURR",
+           standardizeddisaggregate %in% c("Age/Sex")) %>% 
+    unite(combo, c(standardizeddisaggregate, sex, ageasentered), remove = F) %>%
+    mutate(
+      disags = case_when(
+        combo == "Age/Sex_Female_15-19" ~ "F 15-19",
+        combo == "Age/Sex_Male_15-19" ~ "M 15-19",
+        combo == "Age/Sex_Female_20-24" ~ "F 20-24",
+        combo == "Age/Sex_Male_20-24" ~ "M 20-24",
+        combo %in% disagg_regroup_m ~ "M 25-50+",
+        combo %in% disagg_regroup_f ~ "F 25-50+",
+        TRUE ~ combo)
+    ) %>% 
+    mutate(core_disag = 1) %>% 
+    group_by(disags, period, period_type, core_disag) %>% 
+    summarise(total = sum(value, na.rm = TRUE)) %>% 
+    ungroup() %>% 
+    unite(., "period_combo", c(period, period_type), remove = F) 
+  #filter(!period_combo %in% c("FY21Q1_results", "FY20Q2_results", "FY20Q4_results"))
+  
+  prep_curr_disag_all <- 
+    prep_curr_disag %>% 
+    bind_rows(prep_curr_disag_kp) %>% 
+    mutate(disags = fct_relevel(disags,
+                                "M 15-19", 
+                                "F 15-19",
+                                "M 20-24",
+                                "F 20-24",
+                                "M 25-50+",
+                                "F 25-50+",
+                                "FSW",
+                                "MSM")
+    ) %>% 
+    filter(period_type != "cumulative") %>% 
+    spread(period_type, total) %>% # Set targets to repeat in same row as results
+    mutate(fy = str_extract(period, "\\d{2}")) %>% 
+    group_by(disags, fy) %>% 
+    fill(., targets, .direction ="down") %>% 
+    filter(!is.na(results))
+  
+  
+ # PREP_NEW 
+  prep_new_disag_kp <- 
+    genie %>% 
+    filter(indicator == "PrEP_NEW",
+           standardizeddisaggregate %in% c("KeyPopAbr")) %>%
+    unite(combo, c(standardizeddisaggregate, otherdisaggregate), remove = F) %>% 
+    filter(str_detect(combo, "(FSW|MSM)")) %>% 
+    mutate(disags = case_when(
+      combo == "KeyPopAbr_FSW" ~ "FSW",
+      combo == "KeyPopAbr_MSM" ~ "MSM",
+      TRUE ~ NA_character_
+    ), 
+    core_disag = 0) %>% 
+    mutate(core_disag = 0) %>% 
+    group_by(disags, period, period_type, core_disag) %>% 
+    summarise(total = sum(value, na.rm = TRUE)) %>% 
+    ungroup() %>% 
+    unite(., "period_combo", c(period, period_type), remove = F)
+  
+  prep_new_disag <- 
+    genie %>% 
+    filter(indicator == "PrEP_NEW",
+           standardizeddisaggregate %in% c("Age/Sex")) %>% 
+    unite(combo, c(standardizeddisaggregate, sex, ageasentered), remove = F) %>%
+    mutate(disags = case_when(
+      combo == "Age/Sex_Female_15-19" ~ "F 15-19",
+      combo == "Age/Sex_Male_15-19" ~ "M 15-19",
+      combo == "Age/Sex_Female_20-24" ~ "F 20-24",
+      combo == "Age/Sex_Male_20-24" ~ "M 20-24",
+      combo %in% disagg_regroup_m ~ "M 25-50+",
+      combo %in% disagg_regroup_f ~ "F 25-50+",
+      TRUE ~ combo)
+    ) %>% 
+    mutate(core_disag = 1) %>% 
+    group_by(disags, period, period_type, core_disag) %>% 
+    summarise(total = sum(value, na.rm = TRUE)) %>% 
+    ungroup() %>% 
+    unite(., "period_combo", c(period, period_type), remove = F) 
+  
+  prep_new_disag_all <- 
+    prep_new_disag %>% 
+    bind_rows(prep_new_disag_kp) %>% 
+    mutate(disags = fct_relevel(disags,
+                                "M 15-19", 
+                                "F 15-19",
+                                "M 20-24",
+                                "F 20-24",
+                                "M 25-50+",
+                                "F 25-50+",
+                                "FSW",
+                                "MSM")
+    ) %>% 
+    filter(period_type != "cumulative") %>% 
+    spread(period_type, total) %>% # Set targets to repeat in same row as results
+    mutate(fy = str_extract(period, "\\d{2}")) %>% 
+    group_by(disags, fy) %>% 
+    fill(., targets, .direction ="down") %>% 
+    filter(!is.na(results))

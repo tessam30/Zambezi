@@ -125,29 +125,62 @@
     group_by(snu1, period) %>% 
     mutate(share_check = sum(tx_nn_share, na.rm = T)) %>% 
     arrange(snu1, period) %>% 
-    ungroup()
+    ungroup() %>% 
+    clean_psnu()
   
- 
+ write_csv(msd_long, file.path(dataout, "TX_NN_analysis.csv"))
   
 # VIZ ============================================================================
 
   #  
 
   msd_long %>% 
-    filter(snu1 == "Northern Province", 
+    filter(snu1 == "Muchinga Province", 
            str_detect(period, "FY20|FY21")) %>% 
     mutate(psnu_order = fct_reorder(psnu, tx_nn, .fun = sum, na.rm = T, .desc = T)) %>% 
-    ggplot(aes(x = period, y = tx_nn_share_psnu_contrib, group = psnu)) +
+    ggplot(aes(x = period, y = tx_nn_share_psnu_contrib , group = psnu)) +
     geom_area(fill = trolley_grey_light) +
-    geom_point(aes(fill = ifelse(tx_nn_share_psnu_contrib > 0, genoa, old_rose)), shape = 21, size = 3, color = "white") +
-    geom_line(aes(y = tx_nn_growth_snu1)) +
     geom_line() +
+    geom_point(aes(fill = ifelse(tx_nn_share_psnu_contrib  > 0, genoa, old_rose)), shape = 21, size = 3, color = "white") +
+    #geom_label(aes(label = paste0(comma(tx_nn, 1), "\n", percent(tx_nn_share_psnu_contrib, 1)), fill = ifelse(tx_nn_share_psnu_contrib  > 0, genoa_light, old_rose_light)), family = "Source Sans Pro") +
     facet_wrap(~psnu_order) +
     scale_fill_identity() +
     scale_y_continuous(labels = percent) +
-    si_style_ygrid()
-
-      
+    si_style_ygrid() +
+    coord_cartesian(expand = T, clip = "off") +
+    labs(x = NULL, y = NULL, title = "TX_NET_NEW share by PSNU", subtitle = "TX_NN listed as top number, TX_NN district contribution to province ")
+    
   
+  plot_tx_nn <- function(prov = "Muchinga Province") {
+  
+    msd_long %>% 
+    filter(snu1 == prov, 
+           str_detect(period, "FY20|FY21")) %>% 
+    mutate(psnu_order = fct_reorder(psnu, tx_nn, .fun = sum, .desc = T)) %>% 
+    ggplot(aes(x = period, y = tx_nn_share , group = psnu)) +
+    geom_area(fill = trolley_grey_light) +
+    #geom_line(aes(y = tx_nn_growth_snu1), color = grey40k, linetype = "dotted") +
+    geom_line() + 
+    geom_point(aes(fill = ifelse(tx_nn_share  > 0, genoa, old_rose)), shape = 21, size = 3, color = "white") +
+    geom_text(aes(label = paste0(comma(tx_nn, 1))),
+               family = "Source Sans Pro", 
+               vjust = -1) +
+    facet_wrap(~psnu_order) +
+    scale_fill_identity() +
+    scale_y_continuous(labels = percent) +
+    si_style_ygrid() +
+    coord_cartesian(expand = T, clip = "off") +
+    labs(x = NULL, y = NULL, title = "TX_NET_NEW share by PSNU", subtitle = "TX_NN annotated on point. Y-axis reflects psnu share of total TX_NN for province, by period.",
+         caption = "Source: FY21 Q1 MSD Post-Clean")  
+    
+    si_save(file.path(images, glue::glue("{prov}_TX_NN_growth.png")), scale = 1.5, plot = last_plot())
+    
+  }
+      
+  msd_long %>% distinct(snu1) %>%  
+    filter(str_detect(snu1, "Southern|Western", negate = T)) %>% 
+    pull() %>% 
+    map(.x = ., .f = ~plot_tx_nn(.x))
+    
 # SPINDOWN ============================================================================
 

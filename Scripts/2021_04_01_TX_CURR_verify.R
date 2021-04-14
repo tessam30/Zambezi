@@ -2,7 +2,7 @@
 # AUTHOR: Tim Essam | SI
 # LICENSE: MIT
 # DATE: 2021-04-01
-# NOTES: 
+# NOTES: Products that can be shared with AOR/COR and Clinical Partners
 
 # LOCALS & SETUP ============================================================================
 
@@ -45,6 +45,10 @@
   msd <- read_msd(msd_file) %>% 
     filter(indicator == "TX_CURR",
     standardizeddisaggregate == "Total Numerator")
+  
+  msd_peds <- read_msd(msd_file) %>% 
+    filter(indicator == "TX_CURR",
+           trendsfine %in% c("<01", "01-09", "10-14"))
     
   
 # MUNGE ============================================================================
@@ -80,9 +84,7 @@
   
   
 
-# MUNGE and PROJECT TX_NN to TARGETS --------------------------------------
-
-  
+# MUNGE and PROJECT TX_NN to TARGETS -------------------------------------
   
   msd_long <- 
     msd %>% 
@@ -95,7 +97,7 @@
     separate(period2, c("FY", "qtr"), sep = "Q") %>% 
     group_by(psnu, FY) %>% 
     fill(targets, .direction = "down") %>% 
-    filter(!period %in% c("FY20", "FY21", "FY19")) %>% 
+    filter(!period %in% c("FY20", "FY21", "FY19")) %>% # Populating DATIM targets to each quarter
     rename(tx_curr = results) %>% 
     ungroup() %>% 
     group_by(psnu) %>% 
@@ -106,14 +108,22 @@
     group_by(period, snu1) %>% 
     mutate(tx_curr_snu1 = sum(tx_curr)) %>% 
     arrange(psnu, period) %>% 
-    group_by(psnu) %>% 
+    group_by(psnu) %>% # PSNU level calculations
     mutate(tx_curr_lag = lag(tx_curr, order_by = period),
            tx_nn = tx_curr - tx_curr_lag,
-           tx_nn_growth = (tx_curr - tx_curr_lag)/tx_curr_lag) %>% 
+           tx_nn_growth = (tx_curr - tx_curr_lag)/tx_curr_lag,
+           tx_curr_lag_annual = lag(tx_curr, order_by = period, n = 4),
+           tx_nn_annual = tx_curr - tx_curr_lag_annual,
+           tx_nn_growth_annual = (tx_curr - tx_curr_lag_annual)/tx_curr_lag_annual,
+           tx_nn_lag = lag(tx_nn),
+           tx_2qtr_ave = (tx_nn + tx_nn_lag)/2,
+           tx_curr_projected = (tx_curr + (3 * tx_2qtr_ave)),
+           tx_curr_projected_growth = ((tx_curr_projected * tx_nn_growth_annual) + tx_curr_projected)) %>% 
     ungroup() %>% 
     relocate(tx_curr_snu1, .after = last_col()) %>% 
     group_by(snu1, period) %>% 
     mutate(tx_curr_lag_snu1 = sum(tx_curr_lag, na.rm = T),
+           tx_curr_lag_annual_snu1 = sum(tx_curr_lag_annual, na.rm = T),
            tx_nn_snu1 = ifelse(tx_curr_lag_snu1 != 0, tx_curr_snu1 - tx_curr_lag_snu1, NA_integer_)) %>% 
     ungroup() %>% 
     group_by(psnu) %>% 
@@ -125,11 +135,75 @@
     group_by(snu1, period) %>% 
     mutate(share_check = sum(tx_nn_share, na.rm = T)) %>% 
     arrange(snu1, period) %>% 
-    ungroup() %>% 
-    clean_psnu()
+    ungroup() %>%
+    clean_psnu() 
+
+    
   
  write_csv(msd_long, file.path(dataout, "TX_NN_analysis.csv"))
-  
+ 
+ 
+
+# MUNGE and PROJECT PEDS --------------------------------------------------
+
+  msd_peds_long <- 
+   msd_peds %>% 
+   filter(fundingagency == "USAID",
+          str_detect(snu1, "Central|Copperbelt|Luapula|Muchinga|Northern|NorthWestern")) %>% 
+   group_by(psnu, psnuuid, snu1, fundingagency, fiscal_year, sex) %>% 
+   summarise(across(.cols = matches("qtr|target"), sum, na.rm = T)) %>% 
+   reshape_msd(clean = T) %>% 
+   spread(period_type, val) %>% 
+   mutate(period2 = period, 
+          ageband = "0 - 14") %>% 
+   separate(period2, c("FY", "qtr"), sep = "Q") %>% 
+   group_by(psnu, FY, sex) %>% 
+   fill(targets, .direction = "down") %>% 
+   filter(!period %in% c("FY20", "FY21", "FY19")) %>% # Populating DATIM targets to each quarter
+   rename(tx_curr = results) %>% 
+   ungroup() %>% 
+   group_by(psnu, sex) %>% 
+   mutate(pd_flag = ifelse(qtr %in% c(4, 1), 1, NA_integer_),
+          target_nn = ifelse(pd_flag == 1, targets - lag(tx_curr, order_by = period), NA_integer_)) %>% 
+   group_by(psnu, FY, sex) %>% 
+   fill(target_nn, .direction = "up") %>% 
+   group_by(period, snu1, sex) %>% 
+   mutate(tx_curr_snu1 = sum(tx_curr)) %>% 
+   arrange(psnu, sex, period) %>% 
+   group_by(psnu, sex) %>% # PSNU level calculations
+   mutate(tx_curr_lag = lag(tx_curr, order_by = period),
+          tx_nn = tx_curr - tx_curr_lag,
+          tx_nn_growth = (tx_curr - tx_curr_lag)/tx_curr_lag,
+          tx_curr_lag_annual = lag(tx_curr, order_by = period, n = 4),
+          tx_nn_annual = tx_curr - tx_curr_lag_annual,
+          tx_nn_growth_annual = (tx_curr - tx_curr_lag_annual)/tx_curr_lag_annual,
+          tx_nn_lag = lag(tx_nn),
+          # tx_nn_lag2 = lag(tx_nn, n = 2),
+          tx_2qtr_ave = (tx_nn + tx_nn_lag )/2,
+          tx_curr_projected = (tx_curr + (3 * tx_2qtr_ave)),
+          tx_curr_projected_growth = ((tx_curr_projected * tx_nn_growth_annual) + tx_curr_projected)) %>%
+   ungroup() %>% 
+   relocate(tx_curr_snu1, .after = last_col()) %>% 
+   group_by(snu1, period, sex) %>% 
+   mutate(tx_curr_lag_snu1 = sum(tx_curr_lag, na.rm = T),
+          tx_curr_lag_annual_snu1 = sum(tx_curr_lag_annual, na.rm = T),
+          tx_nn_snu1 = ifelse(tx_curr_lag_snu1 != 0, tx_curr_snu1 - tx_curr_lag_snu1, NA_integer_)) %>% 
+   ungroup() %>% 
+   group_by(psnu, sex) %>% 
+   mutate(psnu_runs = n()) %>% 
+   ungroup() %>% 
+   mutate(tx_nn_growth_snu1 = ifelse(tx_curr_lag_snu1 != 0, ((tx_curr_snu1 - tx_curr_lag_snu1) / tx_curr_lag_snu1), NA_real_),
+          tx_nn_share = tx_nn / tx_nn_snu1,
+          tx_nn_share_psnu_contrib = tx_nn_share * tx_nn_growth_snu1) %>% 
+   group_by(snu1, period, sex) %>% 
+   mutate(share_check = sum(tx_nn_share, na.rm = T)) %>% 
+   arrange(snu1, sex, period) %>% 
+   ungroup() %>%
+   clean_psnu() 
+ 
+ write_csv(msd_peds_long, file.path(dataout, "ZMB_peds_net_new_analysis.csv"), na = "")
+ 
+ 
 # VIZ ============================================================================
 
   #  

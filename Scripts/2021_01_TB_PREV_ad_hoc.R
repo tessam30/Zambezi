@@ -47,6 +47,8 @@
     
   msd <- read_msd(file.path(merdata, "MER_Structured_Datasets_OU_IM_FY19-21_20210212_v1_1.zip"))
   
+  genie <- read_msd(file.path(merdata, "Genie-PSNUByIMs-Zambia-Frozen-2021-04-15.zip"))
+  
 # MUNGE ============================================================================
   
   # Pull out TB_PREV N / D to replicate PANO TB SCREENING & TPT:GLOBAL View (OU COMP)
@@ -173,5 +175,133 @@
     si_save(here(graphs, "GLOBAL_tb_art_screen_summmary_fy20.svg"), scale = 1.25) 
       
 
+    
+
+# 2021-04-15 REQUEST ------------------------------------------------------
+
+  # NOTES: 
+  # TB_STAT to show change in notifications. This would include the numerator and denominator over a three year period i.e. 2018 through 2020. 
+  # Annual data would be fine.
+    
+  # TB_PREV denominator and numerator analysis to show coverage against TX_CURR. 
+  # Again annual data over a three year period. We basically want to see the trend of 
+  # coverage against the TX_CURR. We fully understand the TB data is not the most accurate 
+  # in terms of tracking cohorts but it would be useful to look into such an analysis.    
+    
+    
 # SPINDOWN ============================================================================
 
+    source <- "Source: DATIM Genie frozel data pull 2021/04/15"
+    
+    tb_stat <- 
+      genie %>% 
+      filter(indicator == "TB_STAT",
+             #fundingagency %in% c("USAID", "HHS/CDC"),
+             standardizeddisaggregate %in% c("Total Denominator", "Total Numerator")) %>% 
+      group_by(standardizeddisaggregate, indicator, snu1, fiscal_year) %>% 
+      summarise(across(contains("qtr"), sum, na.rm = TRUE)) %>% 
+      reshape_msd(clean = T) %>% 
+      pivot_wider(names_from = c(standardizeddisaggregate),
+                  values_from = val) %>% 
+      mutate(TB_STAT = `Total Numerator` / `Total Denominator`) %>% 
+      group_by(period) %>% 
+      mutate(across(contains("Total"), sum, na.rm = T, .names = "Nat {.col}"),
+             TB_STAT_NAT = `Nat Total Numerator` / `Nat Total Denominator`) %>% 
+      ungroup() %>% 
+      group_by(snu1) %>% 
+      mutate(ave_tb = mean(TB_STAT)) %>% 
+      ungroup() %>% 
+      mutate(snu_order = fct_reorder(paste0(snu1, "\n"), ave_tb, .desc = T))
+    
+
+    tb_stat %>% 
+      filter(period != "FY18Q2") %>% 
+      ggplot(aes(x = period, group = snu1)) +
+      geom_line(aes(y = TB_STAT_NAT), size = 1.25, color = grey20k) +
+
+      geom_line(aes(y = TB_STAT), size = 1, color = grey80k) +
+      geom_point(aes(y = TB_STAT, fill = TB_STAT), size = 3, shape = 21, color = grey80k) +
+      facet_wrap(~snu_order) +
+      si_style_ygrid() +
+      scale_y_continuous(labels = scales::percent_format(1)) +
+      scale_fill_viridis_c(option = "A") +
+      scale_x_discrete(labels = c("FY18Q4", "", "FY19Q2", "", "FY19Q4", "", "FY20Q2", "", "FY20Q4", "")) +
+      theme(legend.position = 'none') +
+      labs(x = NULL, y = NULL, title = "TB_STAT PERCENT COVERAGE TRENDS",
+           caption = source)
+    
+    si_save(file.path(images, "ZMB_TB_STAT_coverage_historical_fixed_y.png"), scale = 1.25)
+    
+    
+    
+    
+    # Pull out TB_PREV N / D to replicate PANO TB SCREENING & TPT:GLOBAL View (OU COMP)
+    tb_prev <- 
+      genie %>% 
+      filter(indicator %in% c("TB_PREV", "TX_CURR"),
+             standardizeddisaggregate %in% c("Total Denominator", "Total Numerator")) %>% 
+      group_by(snu1, numeratordenom, indicator, fiscal_year) %>% 
+      summarise(across(contains("qtr"), sum, na.rm = TRUE)) %>%
+      reshape_msd(clean = T) %>% 
+      ungroup() %>% 
+      pivot_wider(names_from = c(numeratordenom, indicator),
+                  values_from = val) %>% 
+      mutate(fy = str_sub(period, 1, 4)) %>% 
+      group_by(snu1, fy) %>% 
+      mutate(across(contains("_TB"), sum, na.rm = T, .names = "annual {.col}"),
+             coverage = D_TB_PREV / N_TX_CURR,
+             tb_prev_cov = N_TB_PREV / D_TB_PREV) %>% 
+      ungroup() %>% 
+      mutate(snu_order = fct_reorder(paste0(snu1, "\n"), `annual D_TB_PREV`, .desc = T))
+      
+      
+    tb_prev %>% 
+      ggplot(aes(x = period, group = snu1)) +
+      geom_col(aes(y = N_TX_CURR), fill = grey10k) +
+      geom_col(aes(y = D_TB_PREV), fill = scooter, alpha = 0.75) +
+      geom_text(aes(y = D_TB_PREV, label = percent(coverage, 1)), family = "Source Sans Pro", size = 9/.pt, vjust = -1) +
+      facet_wrap(~snu_order, scales = "free_y") +
+      scale_y_continuous(labels = comma) +
+      si_style_ygrid() +
+      labs(x = NULL, y = NULL, title = "TX_PREV_D RELATIVE TO TX_CURR", 
+           caption = source) +
+      scale_x_discrete(labels =c("", "FY18Q2", "", "FY18Q4", "", "FY19Q2", "", "FY19Q4", "", "FY20Q2", "", "FY20Q4", ""))
+    
+    si_save(file.path(images, "ZMB_TB_PREV_TX_CURR_historical_free_y.png"), scale = 1.5)
+    
+    
+    tb_prev %>% 
+      ggplot(aes(x = period, group = snu1)) +
+      geom_col(aes(y = D_TB_PREV), fill = grey20k) +
+      geom_col(aes(y = N_TB_PREV), fill = genoa, alpha = .9) +
+      geom_text(aes(y = N_TB_PREV, label = percent(tb_prev_cov, 1)), family = "Source Sans Pro", size = 9/.pt, vjust = -1) +
+      facet_wrap(~snu_order, scales = "free_y") +
+      scale_y_continuous(labels = comma) +
+      si_style_ygrid() +
+      labs(x = NULL, y = NULL, title = "TX_PREV COVERAGE (TX_PREV_N / TX_PREV_D)",
+           caption = source) +
+      scale_x_discrete(labels =c("", "FY18Q2", "", "FY18Q4", "", "FY19Q2", "", "FY19Q4", "", "FY20Q2", "", "FY20Q4", ""))
+    
+    si_save(file.path(images, "ZMB_TB_prev_coverage_historical_free_y.png"), scale = 1.5)
+    
+    tb_prev %>% 
+      filter(str_detect(period, "(Q1|Q3)", negate = T)) %>% 
+      ggplot(aes(x = period, y = tb_prev_cov, group = snu1)) +
+      geom_area(fill = grey10k, alpha = 0.75) +
+      geom_line(size = 1, color = grey30k) +
+      geom_point(fill = genoa, shape = 21, color = "white", size = 3) +
+      geom_text(aes(label = percent(tb_prev_cov, 1)), family = "Source Sans Pro", size = 9/.pt, vjust = -1) +
+      facet_wrap(~snu_order) +
+      scale_y_continuous(labels = comma) +
+      si_style_ygrid() +
+      labs(x = NULL, y = NULL, title = "TX_PREV COVERAGE (TX_PREV_N / TX_PREV_D) TRENDS",
+           caption = source) +
+      #scale_x_discrete(labels =c("", "FY18Q2", "", "FY18Q4", "", "FY19Q2", "", "FY19Q4", "", "FY20Q2", "", "FY20Q4", "")) +
+      coord_cartesian(clip = "off") +
+      theme(axis.text.y = element_blank())
+      
+    si_save(file.path(images, "ZMB_TB_PREV_coverage_pct_historical_fixed_y.png"), scale = 1.5)
+      
+      
+      
+    

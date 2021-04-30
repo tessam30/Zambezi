@@ -47,7 +47,7 @@
   rm(ox_end, ox_start)
   
   start_date <- "2019-12-30"
-  weeks <- 52
+  weeks <- 90
   
   # DATIM base
   baseurl <- "https://final.datim.org/"
@@ -63,7 +63,7 @@
 
   covid <- who_pandemic() %>% pull(date)
   
-  fy20_dates <- seq.Date(as_date("2019-10-01"), as_date("2020-09-30"), length.out = 365)
+  fy20_dates <- seq.Date(as_date("2019-10-01"), as_date("2021-04-28"), length.out = 365)
   
   df <- tibble(date = fy20_dates) %>%
     mutate(
@@ -208,35 +208,40 @@
 
   # Define filters for various plots
   top_tx_ous <- c(
-    "South Africa", "Nigeria", "Mozambique", "Tanzania", "Zimbabwe",
+    "South Africa", "Nigeria", "Mozambique", "Zimbabwe",
     "Uganda", "Nigeria", "Kenya", "Malawi", "Zambia", "Democratic Republic of Congo",
-    "Eswatini", "Lesotho")
+    "Eswatini")
   select_ous <- c("Kenya", "Nigeria", "Zambia", "Zimbabwe")
   single_ou <- c("Zambia")
   
+  min_date <- as.Date("2020-04-01")
+  max_date <- as.Date("2021-05-01")
+  caption <- "Source: JHU COVID-19 feed + stringecy index from Blavatnik School of Government at Oxford University"
   
   # Without the 14-day moving average line
   df_covid_stringe %>%
-    filter(operatingunit %in% select_ous) %>%
+    filter(operatingunit %in% top_tx_ous) %>%
     mutate(sort_var = fct_reorder(operatingunit, daily_cases, .desc = T)) %>%
     ggplot(aes(x = date), group = operatingunit) +
-    geom_vline(xintercept = as.Date("2020-04-01"), size = 0.5, color = grey20k) +
-    geom_vline(xintercept = as.Date("2020-07-01"), size = 0.5, color = grey20k) +
+    geom_vline(xintercept = as.Date(c("2020-04-01", "2020-07-01", "2020-10-01", 
+                                    "2021-01-01", "2021-04-01")), 
+               size = 0.5, color = grey20k) +
     # geom_line(aes(y = if_else(cases> 1, daily_cases, NA_real_))) +
     geom_area((aes(y = if_else(cases > 0, daily_cases, NA_real_))), fill = grey40k, alpha = 0.85) +
     geom_hline(yintercept = -2, size = 3, color = "white") +
     geom_col(aes(y = -50, fill = (color)), alpha = 1) +
-    facet_wrap(~ paste0(sort_var, "\n")) +
+    facet_wrap(~ paste0(sort_var, "\n"), scales = "free_y") +
     scale_fill_identity() +
     scale_x_date(
-      limits = as.Date(c("2020-01-01", "2020-11-30")),
-      date_labels = "%b", date_breaks = "1 months"
+      limits = c(min_date, max_date),
+      date_labels = "%b %y", date_breaks = "1 months"
     ) +
+    scale_y_continuous(labels = comma)+
     # scale_y_log10() +
-    si_style_ygrid() +
+    si_style_yline() +
     labs(
-      title = "DAILY COVID-19 CASES CONTINUE TO RISE INTO Q4",
-      caption = "Source: JHU COVID-19 feed + stringecy index from Blavatnik School of Government at Oxford University",
+      title = "DAILY COVID-19 CASES CONTINUE TO CYLCE",
+      caption = caption,
       x = NULL, y = NULL
     )
 
@@ -244,34 +249,49 @@
   # Adding in a 14-day lag to match visual approach used by NYTimes
   library(zoo) # for rolling mean
 
-  df_covid_stringe %>%
-    filter(operatingunit %in% c("Zambia")) %>%
+  covid_plot_df <- 
+    df_covid_stringe %>%
+    filter(operatingunit %in% top_tx_ous) %>%
     arrange(date) %>%
     group_by(operatingunit) %>%
     mutate(
-      sort_var = fct_reorder(operatingunit, daily_cases, .desc = T),
+      max_cases = max(cases, na.rm = T),
       seven_day = zoo::rollmean(daily_cases, 7, fill = NA, align = c("right")),
-      fourteen_day = zoo::rollmean(daily_cases, 14, fill = NA, align = c("right"))
-    ) %>%
+      fourteen_day = zoo::rollmean(daily_cases, 14, fill = NA, align = c("right")),
+      covid_max = max(cases, na.rm = T),
+      yaxis_offset = (-covid_max * 0.001),
+      yaxis_offset_lim = yaxis_offset - (0.10 * yaxis_offset)
+    ) %>% 
     ungroup() %>%
+    mutate(sort_var = fct_reorder(operatingunit, max_cases, .desc = T),
+           sa_flag = ifelse(operatingunit == "South Africa", 1, 0)) %>% 
+    group_by(sa_flag) %>% 
+    mutate(axis_max = max(daily_cases, na.rm = T),
+           axis_min = 0) %>% 
+    ungroup()
+
+    
+    
+    # Use a geom_blank to ensure South Africa gets its own axis if included.
+  covid_plot_df %>% 
     ggplot(aes(x = date), group = operatingunit) +
-    annotate("rect", xmin = as.Date("2020-03-01"), xmax = as.Date("2020-04-01"), ymin = 0, ymax = Inf, alpha = 0.5, fill = grey10k) +
-    annotate("rect", xmin = as.Date("2020-07-01"), xmax = as.Date("2020-10-01"), ymin = 0, ymax = Inf, alpha = 0.5, fill = grey10k) +
-    geom_vline(xintercept = as.Date("2020-04-01"), size = 0.5, color = grey20k) +
-    geom_vline(xintercept = as.Date("2020-07-01"), size = 0.5, color = grey20k) +
+    annotate("rect", xmin = as.Date("2021-01-01"), xmax = as.Date("2021-04-01"), ymin = 0, ymax = Inf, alpha = 0.5, fill = grey10k) +
     # geom_line(aes(y = if_else(cases> 1, daily_cases, NA_real_))) +
     geom_col((aes(y = if_else(cases > 0, daily_cases, NA_real_))), fill = grey30k, alpha = 0.85) +
     geom_area(aes(y = fourteen_day), fill = "#f7c5c4", alpha = 0.75) +
     geom_line(aes(y = fourteen_day), color = "#d73636", size = 0.75, alpha = 0.75) +
+    geom_blank(aes(y = axis_max)) +
+    geom_blank(aes(y = axis_min)) +
     # geom_line(aes(y = zoo::rollmean(daily_cases, 14, fill = grey20k, align = c("right")))) +
     # geom_hline(yintercept = -5, size = 2, color = "white") +
-    geom_col(aes(y = -50, fill = (color)), alpha = 0.85) +
-    geom_col(aes(y = -10), fill = "white") +
-    facet_wrap(~ paste0(sort_var, "\n")) +
+    # geom_col(aes(y = yaxis_offset, fill = (color)), alpha = 0.85) +
+    # geom_col(aes(y = yaxis_offset_lim), fill = "white") +
+    facet_wrap(~ sort_var, scales = "free_y") +
     scale_fill_identity() +
+    scale_y_continuous(labels = comma)+
     scale_x_date(
-      limits = as.Date(c("2020-03-01", "2020-11-30")),
-      date_labels = "%b", date_breaks = "1 months"
+      limits = c(min_date, max_date),
+      date_labels = "%b %y", date_breaks = "1 months"
     ) +
     # scale_y_log10() +
     si_style_ygrid() +

@@ -32,7 +32,7 @@
   period <- "Q4"
   
   # quarter starts
-  qtrs <- as_date(c("2019-10-01", "2020-01-01", "2020-04-01", "2020-07-01", "2020-09-30"))
+  qtrs <- as_date(c("2019-10-01", "2020-01-01", "2020-04-01", "2020-07-01", "2020-09-30", "2021-01-01", "2021-04-01"))
   
   # review slide background
   bckgrnd <- "#cfcdc9"
@@ -51,19 +51,20 @@
   
   # DATIM base
   baseurl <- "https://final.datim.org/"
-  source("../../../Documents/funny_things.R")
+  load_secrets()
+  
 
 # IMPORT ------------------------------------------------------------------
 
   # myuser <- "" #do not save; see above in source
-  iso_map <- identify_levels(username = username, password = mypwd(username)) %>%
+  iso_map <- glamr::identify_levels(datim_user(), datim_pwd())  %>%
     rename(iso = countryname_iso)
 
 # COVID CALENDAR ----------------------------------------------------------
 
   covid <- who_pandemic() %>% pull(date)
   
-  fy20_dates <- seq.Date(as_date("2019-10-01"), as_date("2021-04-28"), length.out = 365)
+  fy20_dates <- seq.Date(as_date("2019-10-01"), as_date("2021-05-09"), length.out = 365)
   
   df <- tibble(date = fy20_dates) %>%
     mutate(
@@ -110,7 +111,7 @@
     filter(cases >= 10)
 
   df_covid_pepfar_top <- df_covid_pepfar %>%
-    filter(countryname %in% top_tx) %>%
+    filter(countryname %in% "Zambia") %>%
     group_by(countryname) %>%
     mutate(lab = case_when(date == max(date) ~ iso)) %>%
     ungroup()
@@ -215,12 +216,12 @@
   single_ou <- c("Zambia")
   
   min_date <- as.Date("2020-04-01")
-  max_date <- as.Date("2021-05-01")
+  max_date <- as.Date("2021-05-10")
   caption <- "Source: JHU COVID-19 feed + stringecy index from Blavatnik School of Government at Oxford University"
   
   # Without the 14-day moving average line
   df_covid_stringe %>%
-    filter(operatingunit %in% top_tx_ous) %>%
+    filter(operatingunit %in% single_ou) %>%
     mutate(sort_var = fct_reorder(operatingunit, daily_cases, .desc = T)) %>%
     ggplot(aes(x = date), group = operatingunit) +
     geom_vline(xintercept = as.Date(c("2020-04-01", "2020-07-01", "2020-10-01", 
@@ -251,7 +252,7 @@
 
   covid_plot_df <- 
     df_covid_stringe %>%
-    filter(operatingunit %in% top_tx_ous) %>%
+    filter(operatingunit %in% single_ou) %>%
     arrange(date) %>%
     group_by(operatingunit) %>%
     mutate(
@@ -275,7 +276,7 @@
     # Use a geom_blank to ensure South Africa gets its own axis if included.
   covid_plot_df %>% 
     ggplot(aes(x = date), group = operatingunit) +
-    annotate("rect", xmin = as.Date("2021-01-01"), xmax = as.Date("2021-04-01"), ymin = 0, ymax = Inf, alpha = 0.5, fill = grey10k) +
+    annotate("rect", xmin = as.Date("2021-01-01"), xmax = as.Date("2021-05-10"), ymin = 0, ymax = Inf, alpha = 0.5, fill = grey10k) +
     # geom_line(aes(y = if_else(cases> 1, daily_cases, NA_real_))) +
     geom_col((aes(y = if_else(cases > 0, daily_cases, NA_real_))), fill = grey30k, alpha = 0.85) +
     geom_area(aes(y = fourteen_day), fill = "#f7c5c4", alpha = 0.75) +
@@ -284,8 +285,8 @@
     geom_blank(aes(y = axis_min)) +
     # geom_line(aes(y = zoo::rollmean(daily_cases, 14, fill = grey20k, align = c("right")))) +
     # geom_hline(yintercept = -5, size = 2, color = "white") +
-    # geom_col(aes(y = yaxis_offset, fill = (color)), alpha = 0.85) +
-    # geom_col(aes(y = yaxis_offset_lim), fill = "white") +
+    # geom_col(aes(y = -50, fill = (color)), alpha = 0.85) +
+    # geom_col(aes(y = -10), fill = "white") +
     facet_wrap(~ sort_var, scales = "free_y") +
     scale_fill_identity() +
     scale_y_continuous(labels = comma)+
@@ -296,14 +297,14 @@
     # scale_y_log10() +
     si_style_ygrid() +
     labs(
-      title = "DAILY COVID-19 CASES ON THE DECLINE IN FY21Q1",
+      title = "DAILY COVID-19 CASES PEAKED IN FY21 Q2",
       caption = "Source: JHU COVID-19 feed + stringecy index from Blavatnik School of Government at Oxford University",
       x = NULL, y = NULL
     )
 
 
   # Save using dimensions of google slides and setting dingbats = F to render fonts in .AI
-  ggsave(file.path(viz_folder, "2020_COVID_rise.pdf"),
+  ggsave(file.path(viz_folder, "2021_COVID_rise.pdf"),
     plot = last_plot(), useDingbats = F,
     width = 10, height = 5.625, dpi = "retina"
   )

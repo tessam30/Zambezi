@@ -41,7 +41,8 @@
   msd_ou <- read_msd(file.path(merdata, "MER_Structured_Datasets_OU_IM_FY19-21_20210319_v2_1.zip"))
   subnat <- read_msd(file.path(merdata, "MER_Structured_Datasets_NAT_SUBNAT_FY15-21_20210319_v2_1.zip"))
     
-  genie <- read_msd(file.path(merdata, "Genie-PSNUByIMs-MultipleOUs-Daily-2021-04-19.zip"))  
+  genie <- read_msd(file.path(merdata, "Genie-PSNUByIMs-MultipleOUs-Daily-2021-04-19.zip")) 
+  genie_2 <- read_msd(file.path(merdata, "ZMB", "Genie-OUByIMs-Zambia-Daily-2021-05-11.zip"))
     
 # MUNGE ============================================================================
   
@@ -255,7 +256,7 @@
   
   # TX_CURR Request
   tx_qtr <-  
-    msd %>% 
+    genie_2 %>% 
     filter(operatingunit == "Zambia", 
            indicator %in% c("TX_CURR"),
            standardizeddisaggregate == "Age/Sex/HIVStatus",
@@ -271,17 +272,28 @@
     group_by(ageasentered, fy) %>% 
     fill(tgt, .direction = "updown") %>% 
     filter(!period %in% c("FY21")) %>%
-    ungroup()
+    ungroup() %>% 
+    filter(period == 'FY21Q2')
   
+  
+  # Recalculate gap
+  tx_qtr_gap <- 
     tx_qtr %>% 
-      select(-c(targets, fy)) %>% 
-    left_join(., cov, by = c("period", "indicator", "sex", "ageasentered")) %>% 
-      mutate(age_color = ifelse(ageasentered == "20-24" & sex == "Male", burnt_sienna, grey20k)) %>% 
+    select(-c(targets, fy)) %>% 
+    left_join(tx_gap, by = c("ageasentered" = "age", "sex")) %>% 
+    select(period:`PLHIV.2021`) %>% 
+    mutate(Gap = results - `PLHIV.2021`,
+           coverage = results/`PLHIV.2021`) %>% 
+      mutate(age_color = ifelse(ageasentered == "20-24" & sex == "Male", burnt_sienna, grey20k))
+  
+  male_tx <- 
+    tx_qtr_gap %>% 
+    filter(sex == "Male") %>% 
       ggplot(aes(y = ageasentered, x = coverage)) +
       geom_col(aes(fill = age_color), alpha = 0.85) +
       scale_fill_identity() +
       new_scale_fill() +
-      geom_point(aes(x = -0.05, fill = results), size = 18, shape = 21, color = grey90k) +
+      geom_point(aes(x = -0.05, fill = results), size = 17, shape = 21, color = grey90k) +
       geom_vline(xintercept = c(0.25, 0.5, 0.75), color = "white")+
       geom_text(aes(label = percent(coverage, 1)), 
                 hjust = 1.1, 
@@ -304,13 +316,15 @@
             width = 13, height = 5.79) 
   
   # GAP
-  tx_gap %>% 
-    ggplot(aes(y = age)) +
+ male_tx_gap <- 
+   tx_qtr_gap %>% 
+    filter(sex == "Male") %>% 
+    ggplot(aes(y = ageasentered)) +
     geom_col(aes(x = Gap), fill = grey20k) +
-    geom_vline(xintercept = c(seq(0, -4e4, -1e4)), color = "white")+
-    geom_point(aes(x = 2500, fill = TX_CURR), size = 18, shape = 21, color = grey90k) +
-    geom_text(aes(x = 2500, label = comma(TX_CURR),
-              color = ifelse(TX_CURR > 40000, "white", "black")),
+    geom_vline(xintercept = c(seq(-4e4, -1e4)), color = "white")+
+    geom_point(aes(x = 2500, fill = results), size = 17, shape = 21, color = grey90k) +
+    geom_text(aes(x = 2500, label = comma(results),
+              color = ifelse(results > 40000, "white", "black")),
               size = 9/.pt) +
     geom_text(aes(x = Gap, label = comma(Gap, accuracy = 1L)), hjust = 1.05, size = 9/.pt)+
 
@@ -318,21 +332,45 @@
     si_style_nolines() +
     labs(x = NULL, y = NULL, title = "") +
     theme(legend.position = "none" ) +
-    scale_y_discrete(limits = rev) +
+    scale_y_discrete(limits = rev, position = "right") +
     coord_cartesian(clip = "off") +
     scale_fill_si(palette = "moody_blues", discrete = F) +
     new_scale_fill() +
     scale_color_identity() +
     scale_x_continuous(limits = c(-5e4, 2500)) +
-    theme(axis.text.x = element_blank())
+    theme(axis.text.x = element_blank(),
+          strip.text = element_blank())
   
-  si_save(file.path(images, "ZMB_age_plhiv_treatment_gap_coverage_disags.png"), scale = 1.33, 
+ male_tx + male_tx_gap + si_save(file.path(images, "ZMB_age_tx_gap_combo_plot.png"), 
+                                   scale = 1.33)
+ 
+ si_save(file.path(images, "ZMB_age_plhiv_treatment_gap_coverage_disags.png"), scale = 1.33, 
           width = 13, height = 5.79) 
     
 
   # TX_CURR for just 20-24 and 50+
-  tx_qtr <-  
-    msd %>% 
+ tx_qtr_19 <-  
+   msd %>% 
+   filter(operatingunit == "Zambia", 
+          indicator %in% c("TX_CURR"),
+          sex == "Male", 
+          standardizeddisaggregate == "Age/Sex/HIVStatus") %>% 
+   reshape_msd(clean = T) %>% 
+   spread(period_type, value) %>% 
+   group_by(period, indicator, ageasentered) %>% 
+   summarise(results = sum(results, na.rm = T), 
+             targets = sum(targets, na.rm = T)) %>% 
+   ungroup() %>% 
+   mutate(fy = str_sub(period, 1, 4),
+          tgt = ifelse(targets > 0, targets, NA_integer_)) %>% 
+   group_by(ageasentered, fy) %>% 
+   fill(tgt, .direction = "updown") %>% 
+   filter(!period %in% c("FY19", "FY20", "FY21", "FY22")) %>% 
+   filter(str_detect(period, "FY19"))
+ 
+ 
+ tx_qtr <-  
+    genie_2 %>% 
     filter(operatingunit == "Zambia", 
            indicator %in% c("TX_CURR"),
            sex == "Male", 
@@ -347,10 +385,14 @@
            tgt = ifelse(targets > 0, targets, NA_integer_)) %>% 
     group_by(ageasentered, fy) %>% 
     fill(tgt, .direction = "updown") %>% 
-    filter(!period %in% c("FY19", "FY20", "FY21"))
+    filter(!period %in% c("FY19", "FY20", "FY21", "FY22"))
+ 
+ tx_qtr_19_21 <- bind_rows(tx_qtr, tx_qtr_19)
+ 
+ 
   
  tx_qtr_25_34 <- 
-   tx_qtr %>% 
+   tx_qtr_19_21  %>% 
     ungroup() %>% 
     filter(ageasentered %in% c("25-29", "30-34", "50+")) %>%
     mutate(age_group = case_when(
@@ -363,38 +405,39 @@
   
     
  tx_qtr_20_34 <- 
-   tx_qtr %>% 
+   tx_qtr_19_21 %>% 
    ungroup() %>% 
    filter(ageasentered %in% c("25-29", "30-34", "50+"))
   
   
- tx_qtr_25_34 %>% 
+ tx_qtr_20_34 %>% 
   mutate(error_bar = ifelse(results > tgt, "white", grey90k)) %>% 
     ggplot(aes(x = period, y = results, group = ageasentered)) + 
     geom_col(aes(y = tgt), fill = grey10k)+
     geom_col(aes(fill = ifelse(results/tgt > 1, genoa, grey30k)), alpha = 0.85) + 
     geom_hline(yintercept = c(seq(0, 100000, 25000)), color = "white", size = 0.1) +
     geom_errorbar(aes(ymin = tgt, ymax = tgt, color = error_bar), linetype = "dotted") +
-    geom_text(aes(label = comma(results),
+    geom_text(aes(label = comma(results, 1),
                   color = ifelse(results/tgt > 1, "white", grey90k)),
               size = 9/.pt, vjust = 1.5) +
     geom_label(aes(label = percent(results/tgt, 1)), 
                    size = 9/.pt, color = grey90k, nudge_y = 2000) +
-    facet_wrap(~paste0(ageasentered, "\n"), scales = "fixed") +
+    facet_wrap(~paste0("Males ", str_to_upper(ageasentered), "\n"), scales = "fixed") +
     si_style_nolines() +
     #scale_y_continuous(breaks = comma(c(seq(25000, 100000, 25000))), position = "right", breaks = ) +
     scale_y_continuous(label = label_number_si(), position = "right") +
-    #theme(axis.text.y = element_blank()) +
-    scale_x_discrete(labels = c("FY19Q1", "", "FY19Q3", "", "FY20Q1", "", "FY20Q3", "", "FY21Q1")) +
+    theme(axis.text.y = element_blank(),
+          strip.text = element_text(size = 14, face = "bold")) +
+    scale_x_discrete(labels = c("FY19Q1", "", "FY19Q3", "", "FY20Q1", "", "FY20Q3", "", "FY21Q1", "")) +
     labs(x = NULL, y = NULL, title = "",
-         caption = "Source: MSD FY21Q1 Post-Clean") +
+         caption = "Source: Genie OU X IM 2021-05-11") +
     scale_fill_identity()+
     scale_color_identity() +
     coord_cartesian(expand = F, clip = "off")
     
     ggsave(file.path(images, "ZMB_TX_curr_men_age_disags_25_34.png"), 
            width = 12.5, height = 5.75, dpi = "retina", 
-           scale = 1)
+           scale = 1.25)
 
 
     # VIZ ============================================================================

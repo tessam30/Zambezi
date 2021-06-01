@@ -374,5 +374,10 @@
     
     
     
+  my_labels <- seq(2004, 2020, 1) %>% 
+    substr(., 3, 4) %>% paste0("FY", .)
+  
+  cust_labels <- nrsmisc::every_nth(my_labels, 4, inverse = T)
+  
     
     

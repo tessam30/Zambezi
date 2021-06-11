@@ -216,7 +216,7 @@
   single_ou <- c("Zambia")
   
   min_date <- as.Date("2020-04-01")
-  max_date <- as.Date("2021-05-10")
+  max_date <- Sys.Date()
   caption <- "Source: JHU COVID-19 feed + stringecy index from Blavatnik School of Government at Oxford University"
   
   # Without the 14-day moving average line
@@ -280,7 +280,7 @@
     # geom_line(aes(y = if_else(cases> 1, daily_cases, NA_real_))) +
     geom_col((aes(y = if_else(cases > 0, daily_cases, NA_real_))), fill = grey30k, alpha = 0.85) +
     geom_area(aes(y = fourteen_day), fill = "#f7c5c4", alpha = 0.75) +
-    geom_line(aes(y = fourteen_day), color = "#d73636", size = 0.75, alpha = 0.75) +
+    geom_line(aes(y = fourteen_day), color = "#d73636", size = 0.75, arrow = arrow(type = "closed")) +
     geom_blank(aes(y = axis_max)) +
     geom_blank(aes(y = axis_min)) +
     # geom_line(aes(y = zoo::rollmean(daily_cases, 14, fill = grey20k, align = c("right")))) +
@@ -300,7 +300,8 @@
       title = "DAILY COVID-19 CASES PEAKED IN FY21 Q2",
       caption = "Source: JHU COVID-19 feed + stringecy index from Blavatnik School of Government at Oxford University",
       x = NULL, y = NULL
-    )
+    ) +
+    coord_cartesian(clip = "on")
 
 
   # Save using dimensions of google slides and setting dingbats = F to render fonts in .AI

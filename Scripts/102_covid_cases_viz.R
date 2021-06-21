@@ -275,19 +275,19 @@
     
     # Use a geom_blank to ensure South Africa gets its own axis if included.
   covid_plot_df %>% 
-    ggplot(aes(x = date), group = operatingunit) +
-    annotate("rect", xmin = as.Date("2021-01-01"), xmax = as.Date("2021-05-10"), ymin = 0, ymax = Inf, alpha = 0.5, fill = grey10k) +
+    ggplot(aes(x = date), group = singe_ou) +
+    #annotate("rect", xmin = as.Date("2021-01-01"), xmax = Sys.Date(), ymin = 0, ymax = Inf, alpha = 0.5, fill = grey10k) +
     # geom_line(aes(y = if_else(cases> 1, daily_cases, NA_real_))) +
     geom_col((aes(y = if_else(cases > 0, daily_cases, NA_real_))), fill = grey30k, alpha = 0.85) +
     geom_area(aes(y = fourteen_day), fill = "#f7c5c4", alpha = 0.75) +
-    geom_line(aes(y = fourteen_day), color = "#d73636", size = 0.75, arrow = arrow(type = "closed")) +
+    geom_line(aes(y = fourteen_day), color = "#d73636", size = 0.5, arrow = arrow(type = "closed")) +
     geom_blank(aes(y = axis_max)) +
     geom_blank(aes(y = axis_min)) +
     # geom_line(aes(y = zoo::rollmean(daily_cases, 14, fill = grey20k, align = c("right")))) +
     # geom_hline(yintercept = -5, size = 2, color = "white") +
     # geom_col(aes(y = -50, fill = (color)), alpha = 0.85) +
     # geom_col(aes(y = -10), fill = "white") +
-    facet_wrap(~ sort_var, scales = "free_y") +
+    # facet_wrap(~ sort_var, scales = "free_y") +
     scale_fill_identity() +
     scale_y_continuous(labels = comma)+
     scale_x_date(
@@ -297,8 +297,8 @@
     # scale_y_log10() +
     si_style_ygrid() +
     labs(
-      title = "DAILY COVID-19 CASES PEAKED IN FY21 Q2",
-      caption = "Source: JHU COVID-19 feed + stringecy index from Blavatnik School of Government at Oxford University",
+      title = "ZAMBIA DAILY COVID-19 CASES CONTINUE TO RISE THROUGH JUNE 2021",
+      caption = "Source: JHU COVID-19 feed",
       x = NULL, y = NULL
     ) +
     coord_cartesian(clip = "on")
@@ -309,6 +309,12 @@
     plot = last_plot(), useDingbats = F,
     width = 10, height = 5.625, dpi = "retina"
   )
+  
+  ggsave(file.path(viz_folder, "2021_COVID_rise.png"),
+         plot = last_plot(),
+         width = 10, height = 5.625, dpi = "retina"
+  )
+  
 
 
 

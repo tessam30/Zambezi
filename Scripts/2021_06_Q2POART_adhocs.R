@@ -563,3 +563,14 @@ ims_ovc %>%
   theme(legend.position = "off") 
   
 ggsave("Images/USAID_IP_tranch3_OVC_performance_on_treatment.svg", width = 13, height  = 5.5, scale = 1.25, dpi = "retina")
+
+# CXCA TRENDS -------------------------------------------------------------
+
+  ou_im %>% 
+  filter(indicator %in% c("CXCA_SCRN", "CXCA_SCRN_POS", "CXCA_TX"), 
+                   standardizeddisaggregate == "Total Numerator", 
+                   fundingagency == "USAID") %>% 
+  group_by(fiscal_year, indicator) %>% 
+  summarise(across(where(is.double), sum, na.rm = TRUE), .groups = "drop") %>% 
+  ungroup() %>% 
+  mutate(FY21APR = denom_share(cumulative, targets))

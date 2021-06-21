@@ -32,16 +32,6 @@ graphs  <- "Graphics"
 
 merdata <- si_path(type = "path_msd")
 
-# Create a new folder to house regional country tables
-dir_list <- c("Global", "OU", "Regional")
-map(dir_list, ~dir.create(file.path("Images/", .x)))
-
-folder_list <- c("Asia", "WAR", "WesternHemi")
-map(folder_list, ~dir.create(file.path("Images/Regional/", .x)))
-
-# What quarter are we in?
-# TODO: INCORPORATE THIS INTO FLOW
-qtr <- "2"
 
 # Key indicators for the base tables
 indics <- c("PrEP_NEW", "OVC_SERV", "VMMC_CIRC", 
@@ -54,11 +44,11 @@ indics <- c("PrEP_NEW", "OVC_SERV", "VMMC_CIRC",
 # Agency order throughout
 # Use the long order b/c of the varying nature of coverage by diff agencies
 agency_order_shrt <- c("USAID", "ALL OTHER AGENCIES")
-agency_order_long <- c("USAID", "CDC", "OTHER", "DOD", "HRSA", "PRM", "AF", "PC")
+
 
 # call required functions
-source("Scripts/add_achv_colors_tbl.R")
-source("Scripts/MD_tables_reboot_funs.R")
+source("../selfdestructin5/Scripts/add_achv_colors_tbl.R")
+source("../selfdestructin5/Scripts/MD_tables_reboot_funs.R")
 
 
 # Indicator Definitions -- THESE MAY CHANGE DEPENENT ON INDICS above
@@ -320,6 +310,95 @@ df_tbl %>%
   add_achv_shapes() %>% 
   gtsave("Images/ZMB_USAID_Q2_Summary.png")
 
+
+
+# OU AGAINST TARGETS, USAID AGAINST TARGETS, USAID CONTRIBUTION -----------
+
+  df_ou <- ou_im %>% 
+  filter(indicator %in% indics,
+         standardizeddisaggregate %in% c("Total Numerator")) %>% 
+  group_by(fiscal_year, indicator) %>% 
+  summarise(across(where(is.double), sum, na.rm = TRUE), .groups = "drop") %>% 
+  reshape_msd("quarters", qtrs_keep_cumulative = TRUE) %>% 
+  group_by(indicator) %>% 
+  mutate(value_run = row_number(),
+         gap = targets - results_cumulative,
+         gap_denom = (4 - (substr(period, 6, 6) %>% as.numeric)),
+         gap_pace = gap_calc(gap, gap_denom),
+         APR = denom_share(results_cumulative, targets)) %>% 
+  ungroup() %>% 
+  mutate(indicator = fct_relevel(indicator, "HTS_TST", "HTS_TST_POS", "TX_NEW", "TX_CURR",
+                                 "PrEP_NEW", "OVC_SERV", "VMMC_CIRC"))
+
+  add_space <- function(x) {
+    paste0(x, "\n")
+  }
+  
+  # Standard bar graph plot of ahcievement by indicator and time
+  df_usaid %>% 
+    mutate(apr_fill = if_else(APR >= 1, genoa, genoa_light),
+           targ_line = if_else(results_cumulative > targets, "white", grey80k)) %>% 
+    ggplot(aes(x = period)) +
+    geom_col(aes(y = targets), fill = grey10k) +
+    geom_col(aes(y = results_cumulative, fill = apr_fill)) +
+    geom_errorbar(aes(ymin = targets, ymax = targets, color = targ_line), linetype = "dotted") +
+    geom_text(aes(y = results_cumulative, label = percent(APR, 1)), size = 8/.pt, vjust = -0.5) +
+  facet_wrap(~indicator, scales = "free_y", nrow = 2,
+             labeller = labeller(indicator = add_space)) +
+  si_style_ygrid() +
+    scale_y_continuous(labels = comma) +
+    scale_color_identity() +
+    scale_fill_identity() +
+    labs(x = NULL, y = NULL, caption = paste0("Produced on ",Sys.Date(), " using PEPFAR FY21Q2i MSD released on 2021-05-14.")) +
+    theme(axis.text.x = element_text(size = 8))
+  
+  ggsave("Images/ZMB_FY21Q2_USAID_summary.png", height = 6, width = 12.6, scale = 1.25)
+    
+  # USAID ONLY
+  df_usaid <- ou_im %>% 
+    filter(indicator %in% indics,
+           standardizeddisaggregate %in% c("Total Numerator"),
+           fundingagency == "USAID") %>% 
+    group_by(fiscal_year, indicator) %>% 
+    summarise(across(where(is.double), sum, na.rm = TRUE), .groups = "drop") %>% 
+    reshape_msd("quarters", qtrs_keep_cumulative = TRUE) %>% 
+    group_by(indicator) %>% 
+    mutate(value_run = row_number(),
+           gap = targets - results_cumulative,
+           gap_denom = (4 - (substr(period, 6, 6) %>% as.numeric)),
+           gap_pace = gap_calc(gap, gap_denom),
+           APR = denom_share(results_cumulative, targets)) %>% 
+    ungroup() %>% 
+    mutate(indicator = fct_relevel(indicator, "HTS_TST", "HTS_TST_POS", "TX_NEW", "TX_CURR",
+                                   "PrEP_NEW", "OVC_SERV", "VMMC_CIRC"))
+
+  df_usaid_sh <- 
+    df_usaid %>% 
+    rename(usaid_cumulative = results_cumulative) %>% 
+    select(period, indicator, usaid_cumulative) %>% 
+    right_join(df_ou) %>% 
+    mutate(USAID_share = usaid_cumulative / results_cumulative) 
+  
+ df_usaid_sh %>% 
+   mutate(alpha_value = if_else(period == "FY21Q2", 100, 50)) %>% 
+   ggplot(aes(y = period, alpha = alpha_value)) +
+   geom_col(aes(x = results_cumulative), fill = denim_light) +
+   geom_col(aes(x = usaid_cumulative), fill = denim) +
+   geom_text(aes(x = usaid_cumulative, label = percent(USAID_share, 1)), hjust = -0.1, size = 10/.pt)+
+   facet_wrap(~indicator, nrow  = 2, scales = "free_x",
+              labeller = labeller(indicator = add_space)) +
+   scale_x_continuous(labels = comma) +
+   scale_alpha(range = c(0.55, 1))+
+   si_style_xgrid() +
+   labs(x = "\nOU results by quarter", y = NULL, title = "",
+        caption = paste0("Produced on ",Sys.Date(), " using PEPFAR FY21Q2i MSD released on 2021-05-14.")) +
+   coord_cartesian(expand = F, clip = "off") +
+   theme(legend.position = "none")
+   
+   
+ ggsave("Images/ZMB_FY21Q2_USAID_share_summary.png", height = 6, width = 12.6, scale = 1.25)
+    
+
 # Data Visualization 
 # aggregating USAID IM results for the quarter against targets for 4 indicators (HTS,HTS_POS, TX_NEW, TX_CURR); 
 #  the example from our Health Office Portfolio is included as a placeholder for now in the google slides
@@ -367,6 +446,14 @@ ims <- ou_im %>%
          standardizeddisaggregate == "Total Numerator", 
          fundingagency == "USAID", 
          fiscal_year == 2021) %>% 
+  mutate(mech_code = case_when(
+    mech_code == "82075" ~ "18304",
+    TRUE ~ mech_code
+  ),
+    mech_name = case_when(
+      mech_name == "Local Treatment Partner" ~ "EQUIP", 
+      TRUE ~ mech_name
+    )) %>% 
   group_by(fiscal_year, indicator, mech_name, mech_code) %>% 
   summarise(across(where(is.double), sum, na.rm = TRUE), .groups = "drop") %>% 
   ungroup() %>% 
@@ -381,7 +468,7 @@ ims_tbl <-
                                          "17410", "18487", 
                                          "18304", "82075",
                                          "85117"))  %>% 
-  filter(mech_code %in% c("18304", "17399", "17413", "17400", "17410", "17422")) %>% 
+  #filter(mech_code %in% c("18304", "17399", "17413", "17400", "17410", "17422")) %>% 
   mutate(mech_name = case_when(
     str_detect(mech_name, "District Coverage") ~ "DISCOVER-Health",
     str_detect(mech_name, "Open Doors") ~ "Open Doors",
@@ -399,28 +486,80 @@ ims_tbl <-
   mutate(gap = if_else(targets>0, targets - results, NA_real_)) %>% 
   mutate(circle = FY21APR, .after = FY21APR, 
          line_color = if_else(results > targets, "white", grey80k),
-         max = pmax(results, targets) * 1.15,
+         max = pmax(results, targets),
          ach_max = if_else(FY21APR >= 1.25, 1.25, FY21APR))
 
 
 ims_tbl %>% 
+  #filter(str_detect(mech_name, "EQUIP|DISCOVER|SAFE")) %>% 
+  filter(str_detect(mech_name, "ZCH|Open|Stop|Erad")) %>% 
   ggplot(aes(x = indicator)) +
   geom_col(aes(y = targets), fill = grey10k) +
-  geom_col(aes(y = results), fill = grey70k, alpha = 0.85) +
-  facet_wrap(~mech_name, scales = "free") +
+  geom_col(aes(y = results), fill = "#047491", alpha = 0.85) +
+  facet_wrap(~mech_name, labeller = labeller(mech_name = add_space), nrow = 1) +
   si_style_ygrid() +
-  scale_y_continuous(labels = comma) +
+  scale_y_continuous(labels = comma, position = "right") +
   geom_errorbar(aes(ymin = targets, ymax = targets, color = line_color), linetype = "dotted") +
   geom_text(aes(y = results, label = paste0(comma(results))), vjust = 1, color = "white",
             size = 10/.pt)+
-  geom_point(data = . %>% filter(mech_name != "EQUIP"), aes(y = max, fill = ach_max ), size = 10, shape = 21) +
-  geom_text(data = . %>% filter(mech_name != "EQUIP"), aes(y = max, label = percent(FY21APR, 1)), size = 8/.pt)+
+  # geom_point(aes(y = max, fill = ach_max ), size = 10, shape = 21,) +
+  geom_label(aes(y = max, label = percent(FY21APR, 1), fill = ach_max,
+                       color = if_else(FY21APR >0.5, "white", grey80k)), size = 8/.pt)+
+  # geom_text(aes(y = max, label = percent(FY21APR, 1)), size = 8/.pt, vjust = -1)+
   scale_color_identity() +
-  scale_fill_si(palette = "genoas", discrete = F) +
+  scale_fill_si(palette = "scooters", discrete = F) +
   labs(x = NULL, y = NULL, title = "",
        caption = "Source FY21Q2i MSD released on 2021-05-14") +
-  coord_cartesian(expand = TRUE, clip = "off") +
+  coord_cartesian(expand = F, clip = "off") +
   theme(legend.position = "off")
 
 
-ggsave("Images/USAID_performance_on_treatment.svg", width = 10, height  = 5.625, scale = 1.25, dpi = "retina")
+ggsave("Images/USAID_IP_tranch2_performance_on_treatment.svg", width = 13, height  = 5.5, scale = 1.25, dpi = "retina")
+
+
+
+
+# OVC INDICATORS ----------------------------------------------------------
+  ims_ovc <- ou_im %>% 
+    filter(indicator %in% c("OVC_SERV", "OVC_SERV_UNDER_18"),
+           standardizeddisaggregate == "Total Numerator", 
+           fundingagency == "USAID", 
+           fiscal_year == 2021) %>% 
+    mutate(mech_code = case_when(
+      mech_code == "82075" ~ "18304",
+      TRUE ~ mech_code
+    ),
+    mech_name = case_when(
+      mech_name == "Local Treatment Partner" ~ "EQUIP", 
+      TRUE ~ mech_name
+    )) %>% 
+    group_by(fiscal_year, indicator, mech_name, mech_code) %>% 
+    summarise(across(where(is.double), sum, na.rm = TRUE), .groups = "drop") %>% 
+    ungroup() %>% 
+    mutate(FY21APR = denom_share(cumulative, targets)) %>% 
+  filter(qtr2 > 0) %>% 
+  mutate(line_color = if_else(cumulative > targets, "white", grey80k),
+         max = pmax(cumulative, targets))
+
+ims_ovc %>% 
+  ggplot(aes(x = indicator)) +
+  geom_col(aes(y = targets), fill = grey10k) +
+  geom_col(aes(y = cumulative), fill = "#047491", alpha = 0.85) +
+  facet_wrap(~mech_name, labeller = labeller(mech_name = add_space), nrow = 1) +
+  si_style_ygrid() +
+  scale_y_continuous(labels = comma, position = "right") +
+  geom_errorbar(aes(ymin = targets, ymax = targets, color = line_color), linetype = "dotted") +
+  geom_text(aes(y = cumulative, label = paste0(comma(cumulative))), vjust = 1, color = "white",
+            size = 10/.pt)+
+  # geom_point(aes(y = max, fill = ach_max ), size = 10, shape = 21,) +
+  geom_label(aes(y = max, label = percent(FY21APR, 1), fill = FY21APR,
+                 color = if_else(FY21APR >0.5, "white", grey80k)), size = 8/.pt)+
+  # geom_text(aes(y = max, label = percent(FY21APR, 1)), size = 8/.pt, vjust = -1)+
+  scale_color_identity() +
+  scale_fill_si(palette = "scooters", discrete = F, limits = c(0, 1)) +
+  labs(x = NULL, y = NULL, title = "",
+       caption = "Source FY21Q2i MSD released on 2021-05-14") +
+  coord_cartesian(expand = F, clip = "off") +
+  theme(legend.position = "off") 
+  
+ggsave("Images/USAID_IP_tranch3_OVC_performance_on_treatment.svg", width = 13, height  = 5.5, scale = 1.25, dpi = "retina")
